@@ -1,0 +1,122 @@
+\documentclass[a4paper,11pt]{article}
+
+\usepackage{amsmath}
+\usepackage{amssymb}
+
+\title{An representation of structured submeshes for code generation}
+\begin{document}
+
+\maketitle
+
+\section{Idea}
+\label{sec:idea}
+
+We are currently applying ad-hoc code generation to exploit structure
+of various kinds in meshes. Be that regular ``block-structured''
+refinement of unstructured meshes, or columnar extrusion of
+unstructured meshes. Ideally, we would like to be able to do both.
+
+Here, we describe a symbolic representation of the sub-structuring patterns
+and iteration over the structure that should enable code generation
+without hand-coding all of the individual cases.
+
+We will represent the structuring operation by an object
+\texttt{Structure}. Conceptually, we think of the structuring as
+operating on each element $e_o$ in a mesh $M_o$ and producing, for
+each element, a new mesh $M_n$with some number of new elements $e_n$
+(which may be of a different type to the original mesh).
+
+For the purposes of code generation, we assume that we produce
+code that operates on each $e_o$ in turn, and is fed data in a
+canonical ``reference element'' order. It is the job of the outside
+iteration engine to ensure that this is the case.
+
+\section{Describing structure}
+\label{sec:describing-structure}
+
+We will want to index different entity types in the structured mesh
+separately (for example, iterating over all cells, or over all faces).
+Call these \emph{classes} of entities, with each class containing a
+single type of entity. We label each entity in a class by an integer
+$i_e \in [0, N_e)$, with $N_e$ the number of entities of class $e$. To
+provide an iteration order over the entities, we will use a polyhedral
+set $\Phi_e$. We index each entity by a multiindex
+$\alpha_e \in \Phi_e$. For example, for refinement of a quad into 16
+quads, we can describe the cells with
+\begin{equation}
+  \Phi_{\text{cell}} = \{(i, j) \colon 0 \le i < 4, 0 \le j < 4 \}.
+\end{equation}
+An iteration order is obtained through a map
+\begin{equation}
+  \label{eq:3}
+  I_e \colon \Phi_e \to [0, N_e).
+\end{equation}
+For example, lexicographic iteration over $\Phi_{\text{cell}}$ would
+be obtained by choosing
+\begin{equation}
+  \label{eq:4}
+  I_\text{cell}(i, j) = 4*j + i.
+\end{equation}
+A tiling of the 2D domain can be achieved by splitting the indices of
+$\Phi_{\text{cell}}$ and an appropriate loop order (imposed by choice
+of $I_\text{cell}$).
+
+These iteration indices can be used to compute offsets into the local
+vector by an affine transformation.
+
+In addition to mapping from points in the set to iteration indices
+(and hence dofs), we also need some topological queries. For example,
+given a cell multiindex and an index of a subentity of the cell, we
+should be able to return the appropriate subentity multiindex. We also
+need the reverse (multi-)map. That is, denoting a subentity on the
+reference element by the multiindex $\beta$, we need a map
+\begin{equation}
+  \label{eq:5}
+  T_{e,k} : \Phi_e \times \beta \to \Phi_k.
+\end{equation}
+Similarly we need the dual operation mapping
+\begin{equation}
+  \label{eq:6}
+  T^*_{k,e} : \Phi_k \to \Phi_e \times \beta.
+\end{equation}
+We only need to explicitly provide mappings between entities of
+neighbouring dimension, since the remainder can be obtained by composition.
+Note, in DMPlex-like terminology, these operations are called \texttt{cone}
+and \texttt{support} respectively.
+
+\section{Example: extruded meshes}
+\label{sec:exampl-extr-mesh}
+
+Extruding a single triangular cell gives us $N_c$ prismatic cells in a
+column. Enumerating the entity sets, using the notation $(a, b)$ for
+an entity with co-dimension $a$ on the base cell and co-dimension $b$
+on the extruding interval, we have cells:
+\begin{equation}
+  \label{eq:7}
+  \Phi_{(0, 0)} = \{i \colon 0 \le i < N_c\},
+\end{equation}
+horizontal faces
+\begin{equation}
+  \label{eq:8}
+  \Phi_{(0, 1)} = \{i \colon 0 \le i < N_c + 1\},
+\end{equation}
+vertical faces
+\begin{equation}
+  \Phi_{(1, 0)} = \{(i,j) \colon 0 \le i < N_c, 0 \le j < 3\},
+\end{equation}
+horizontal edges
+\begin{equation}
+  \label{eq:9}
+  \Phi_{(1, 1)} = \{(i,j) \colon 0 \le i < N_c+ 1, 0 \le j < 3\},
+\end{equation}
+vertical edges
+\begin{equation}
+  \label{eq:10}
+  \Phi_{(2, 0)} = \{(i, j) \colon 0 \le i < N_c, 0 \le j < 3\},
+\end{equation}
+and vertices
+\begin{equation}
+  \label{eq:11}
+  \Phi_{(2, 1)} = \{(i, j) \colon 0 \le i < N_c +1, 0 \le j < 3\}.
+\end{equation}
+\end{document}

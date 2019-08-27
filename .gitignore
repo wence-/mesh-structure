@@ -1,0 +1,6 @@
+/doc/structure.pdf
+/doc/*.aux
+/doc/*.fdb_latexmk
+/doc/*.fls
+/doc/*.log
+/doc/*.synctex.gz
