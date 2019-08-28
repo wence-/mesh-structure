@@ -87,6 +87,9 @@ and \texttt{support} respectively.
 \section{Example: extruded meshes}
 \label{sec:exampl-extr-mesh}
 
+\subsection{Entity sets}
+\label{sec:entity-sets}
+
 Extruding a single triangular cell gives us $N_c$ prismatic cells in a
 column. Enumerating the entity sets, using the notation $(a, b)$ for
 an entity with co-dimension $a$ on the base cell and co-dimension $b$
@@ -119,6 +122,9 @@ and vertices
   \label{eq:11}
   \Phi_{(2, 1)} = \{(i, j) \colon 0 \le i < N_c +1, 0 \le j < 3\}.
 \end{equation}
+
+\subsection{``Cone'' maps}
+\label{sec:cone-maps}
 
 Now the forward maps.
 Cells to horizontal faces
@@ -180,4 +186,16 @@ and vertical edges to vertices
     (i+1, j) & \beta = 1 \text{ top vertex}
   \end{cases}.
 \end{equation}
+
+\subsection{``Support'' maps}
+\label{sec:support-maps}
+These maps are dual to the cone maps above. Again, we only need to
+explicitly specify relations between entities of neighbouring
+codimension, since the remainder can be built by appropriate
+composition.
+
+Rather than returning a single (indexed) entity here, we return a
+subset of the pointed-to set, with the bounds on the indices
+implicitly filtering invalid entries.
+
 \end{document}
