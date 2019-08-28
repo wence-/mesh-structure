@@ -198,4 +198,39 @@ Rather than returning a single (indexed) entity here, we return a
 subset of the pointed-to set, with the bounds on the indices
 implicitly filtering invalid entries.
 
+Vertex to vertical edges
+\begin{equation}
+  \label{eq:17}
+  T^*_{(2,1),(2,0)}(i, j) = \{(i-1, j), (i, j)\},
+\end{equation}
+vertex to horizontal edges
+\begin{equation}
+  \label{eq:18}
+  T^*_{(2,1), (1, 1)}(i, j) = \{(i, j-1 \mod 3), (i, j)\},
+\end{equation}
+vertical edge to vertical faces
+\begin{equation}
+  \label{eq:19}
+  T^*_{(2, 0), (1, 0)}(i, j) = \{(i, j - 1 \mod 3), (i, j)\},
+\end{equation}
+horizontal edge to vertical faces
+\begin{equation}
+  \label{eq:20}
+  T^*_{(1, 1), (1, 0)}(i, j) = \{(i - 1, j), (i, j)\},
+\end{equation}
+horizontal edge to horizontal faces
+\begin{equation}
+  \label{eq:20}
+  T^*_{(1, 1), (0, 1)}(i, j) = \{i\},
+\end{equation}
+vertical face to cells
+\begin{equation}
+  \label{eq:21}
+  T^*_{(1, 0), (0, 0)}(i, j) = \{i\},
+\end{equation}
+and horizontal face to cells
+\begin{equation}
+  \label{eq:22}
+  T^*_{(0, 1), (0, 0)}(i, j) = \{i-1, i\}.
+\end{equation}
 \end{document}
