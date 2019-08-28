@@ -119,4 +119,65 @@ and vertices
   \label{eq:11}
   \Phi_{(2, 1)} = \{(i, j) \colon 0 \le i < N_c +1, 0 \le j < 3\}.
 \end{equation}
+
+Now the forward maps.
+Cells to horizontal faces
+\begin{equation}
+  \label{eq:1}
+  T_{(0, 0), (0, 1)}(i, \beta) =
+  \begin{cases}
+    i & \beta = 0 \text{ bottom face}\\
+    i+1 & \beta = 1 \text{ top face}
+  \end{cases},
+\end{equation}
+to vertical faces
+\begin{equation}
+  \label{eq:2}
+  T_{(0, 0), (1, 0)}(i, \beta) = (i, \beta) \quad \text{ $\beta \in \{0, 1, 2\}$}.
+\end{equation}
+Horizontal faces to horizontal edges
+\begin{equation}
+  \label{eq:12}
+  T_{(0,1),(1,1)}(i,\beta) = (i, \beta) \quad \text{ $\beta \in \{0, 1, 2\}$},
+\end{equation}
+vertical faces to horizontal edges
+\begin{equation}
+  \label{eq:13}
+  T_{(1,0),(1,1)}((i, j),\beta) =
+  \begin{cases}
+    (i, j) & \beta = 0 \text{ bottom edge}\\
+    (i+1, j) & \beta = 1 \text{ top edge}
+  \end{cases},
+\end{equation}
+vertical faces to vertical edges
+[FIXME: This supposes a particular numbering convention of vertices and
+edges on a triangle].
+\begin{equation}
+  \label{eq:14}
+  T_{(1,0),(2,0)}((i, j),\beta) =
+  \begin{cases}
+    (i, j) & \beta = 0 \text{ right edge}\\
+    (i, j + 1 \mod 3) & \beta = 1 \text{ left edge}
+  \end{cases}.
+\end{equation}
+
+Now the maps from edges to vertices. First horizontal edges to
+vertices
+\begin{equation}
+  \label{eq:15}
+  T_{(1,1),(2,1)}((i,j), \beta) =
+  \begin{cases}
+    (i, j) & \beta = 0 \text{ right vertex}\\
+    (i, j + 1 \mod 3) & \beta = 1 \text{ left vertex}
+  \end{cases},
+\end{equation}
+and vertical edges to vertices
+\begin{equation}
+  \label{eq:16}
+  T_{(2, 0),(2, 1)}((i, j), \beta) =
+  \begin{cases}
+    (i, j) & \beta = 0 \text{ bottom vertex}\\
+    (i+1, j) & \beta = 1 \text{ top vertex}
+  \end{cases}.
+\end{equation}
 \end{document}
