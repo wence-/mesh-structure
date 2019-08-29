@@ -233,4 +233,106 @@ and horizontal face to cells
   \label{eq:22}
   T^*_{(0, 1), (0, 0)}(i, j) = \{i-1, i\}.
 \end{equation}
+
+\section{Example: blockstructured hexahedral meshes}
+\label{sec:exampl-block-mesh}
+
+\subsection{Entity sets}
+\label{sec:block-entity-sets}
+
+We consider here a hexahedral mesh with a blockstructured refinement of $N_c$
+cells per direction. The local mesh has four geometric entities, cells, faces,
+edges and verticies. Faces and edges both have three topoligical variants, each
+parallel to a different (unit) plane or direction. This gives the following
+entity sets:
+\begin{itemize}
+\item cells:
+  \begin{equation}
+    \label{eq:block-es-cell}
+    \Phi_c = \{ (i,j,k) \colon 0 \le i, j, k < N_c \}
+  \end{equation}
+\item faces parallel to $xy$-plane
+  \begin{equation}
+    \label{eq:block-es-fxy}
+    \Phi_{f_{xy}} = \{ (i,j,k) \colon 0 \le i,j < N_c, 0 \le k < N_c + 1 \}
+  \end{equation}
+\item faces parallel to $xz$-plane
+  \begin{equation}
+    \label{eq:block-es-fxz}
+    \Phi_{f_{xz}} = \{ (i,j,k) \colon 0 \le i,k < N_c, 0 \le j < N_c + 1 \}
+  \end{equation}
+\item faces parallel to $yz$-plane
+  \begin{equation}
+    \label{eq:block-es-fyz}
+    \Phi_{f_{yz}} = \{ (i,j,k) \colon 0 \le k,j < N_c, 0 \le i < N_c + 1 \}
+  \end{equation}
+\item edges parallel to $x$-direction
+  \begin{equation}
+    \label{eq:block-es-ex}
+    \Phi_{e_x} = \{ (i,j,k) \colon 0 \le i < N_c, 0 \le j,k < N_c + 1 \}
+  \end{equation}
+\item edges parallel to $y$-direction
+  \begin{equation}
+    \label{eq:block-es-ey}
+    \Phi_{e_y} = \{ (i,j,k) \colon 0 \le j < N_c, 0 \le i,k < N_c + 1 \}
+  \end{equation}
+\item edges parallel to $z$-direction
+  \begin{equation}
+    \label{eq:block-es-ez}
+    \Phi_{e_z} = \{ (i,j,k) \colon 0 \le k < N_c, 0 \le i,j < N_c + 1 \}
+  \end{equation}
+\item vertices
+  \begin{equation}
+    \label{eq:block-es-v}
+    \Phi_v = \{ (i,j,k) \colon 0 \le i, j, k < N_c + 1 \}
+  \end{equation}
+\end{itemize}
+
+\subsection{``Cone'' maps}
+\label{sec:cone-maps}
+
+In 3D a subentity variant of a cube does not necessarily contain every variant
+of an subentity with higher codimension. For example, the faces parallel to $xy$
+have no topological connection with the edges parallel to $z$.
+\begin{itemize}
+\item cells to face with normal $n$
+  \begin{equation}
+    \label{eq:block-cell-face}
+    T_{c,f}((i,j,k), \beta) = (i, j, k) + \beta n
+  \end{equation}
+\item face with normal $n$ to edge with direction $d$, if $n$ and $d$ are
+  linearly independent
+  \begin{equation}
+    \label{eq:block-face-edge}
+    T_{f,e} ((i,j,k), \beta) = (i, j, k) + \beta (n\times d)
+  \end{equation}
+\item edge with direction $d$ to vertex
+  \begin{equation}
+    \label{eq:block-edge-vertex}
+    T_{e,v} ((i,j,k), \beta) = (i, j, k) + \beta d
+  \end{equation}
+\end{itemize}
+
+\subsection{``Support'' maps}
+\label{sec:support-maps}
+\begin{itemize}
+\item vertex to edge with direction $d$
+  \begin{equation}
+    \label{eq:block-vertex-edge}
+    T^*_{v,e} (i,j,k) = \{(i,j,k) - d, (i,j,k)\}
+  \end{equation}
+\item edge with direction $d$ to face with normal $n$, if $n$ and $d$ are
+  linearly independent
+  \begin{equation}
+    \label{eq:block-edge-face}
+    T^*_{e,f} (i,j,k) = \{(i,j,k) - n\times d, (i,j,k)\}
+  \end{equation}
+\item face with normal $n$ to cell
+    \begin{equation}
+    \label{eq:block-face-cell}
+    T^*_{f,c} (i,j,k) = \{(i,j,k) - n, (i,j,k)\}
+  \end{equation}
+\end{itemize}
+
+
 \end{document}
