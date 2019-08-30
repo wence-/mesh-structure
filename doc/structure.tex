@@ -300,28 +300,36 @@ have no topological connection with the edges parallel to $z$.
     \label{eq:block-cell-face}
     T_{c,f}((i,j,k), \beta) = (i, j, k) + \beta n
   \end{equation}
-\item face with normal $n$ to edge with direction $d$, if $n$ and $d$ are
+\item face with normal $n$ to edge parallel to $d$, if $n$ and $d$ are
   linearly independent
   \begin{equation}
     \label{eq:block-face-edge}
     T_{f,e} ((i,j,k), \beta) = (i, j, k) + \beta (n\times d)
   \end{equation}
-\item edge with direction $d$ to vertex
+\item edge parallel to $d$ to vertex
   \begin{equation}
     \label{eq:block-edge-vertex}
     T_{e,v} ((i,j,k), \beta) = (i, j, k) + \beta d
   \end{equation}
 \end{itemize}
 
+A short example to clarify these maps: consider a face parallel to the
+$xy$-plane and an edge parallel to the $y$ axis. Then $n \times d = (1,0,0)$ and
+the cone map simplifies to
+\begin{equation}
+  \label{eq:block-fxy-ey}
+  T_{f_{xy},e_y} ((i,j,k), \beta) = (i,j,k) + \beta (1,0,0) = (i + \beta, j, k).
+\end{equation}
+
 \subsection{``Support'' maps}
 \label{sec:support-maps}
 \begin{itemize}
-\item vertex to edge with direction $d$
+\item vertex to edge parallel to $d$
   \begin{equation}
     \label{eq:block-vertex-edge}
     T^*_{v,e} (i,j,k) = \{(i,j,k) - d, (i,j,k)\}
   \end{equation}
-\item edge with direction $d$ to face with normal $n$, if $n$ and $d$ are
+\item edge parallel to $d$ to face with normal $n$, if $n$ and $d$ are
   linearly independent
   \begin{equation}
     \label{eq:block-edge-face}
