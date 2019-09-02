@@ -206,17 +206,27 @@ class Extrusion(StructureBase):
         super().__init__()
         self.nlevel = nlevel
         # Extruded triangular prism
-        cells = TensorProductEntitySet(TriangleEntitySet(("i", "j"), 1,
-                                                         variant_tag=ufl.triangle),
-                                       IntervalEntitySet(("k", ), nlevel,
-                                                         variant_tag=ufl.interval),
+        # I think this is the wrong way to think about things.
+        # I only need one index for the cells
+        # But then what about if the base thing is structured?
+        cells = TensorProductEntitySet(PointEntitySet((), 1),
+                                       IntervalEntitySet(("i", ), nlevel),
                                        variant_tag=ufl.TensorProductCell(ufl.triangle, ufl.interval))
-        hfaces = TensorProductEntitySet(TriangleEntitySet(("i", "j"), 1,
-                                                         variant_tag=ufl.triangle),
-                                       IntervalEntitySet(("k", ), nlevel+1,
-                                                         variant_tag=ufl.interval),
-                                       variant_tag=ufl.TensorProductCell(ufl.triangle, ufl.point))
-        vfaces = TensorProductEntitySet(IntervalEntitySet
+        hfaces = TensorProductEntitySet(PointEntitySet((), 1),
+                                        IntervalEntitySet(("i", ), nlevel+1),
+                                        variant_tag=ufl.triangle)
+        vfaces = TensorProductEntitySet(IntervalEntitySet(("i", ), 3),
+                                        IntervalEntitySet(("j", ), nlevel),
+                                        variant_tag=ufl.TensorProductCell(ufl.interval, ufl.interval))
+        vedges = TensorProductEntitySet(IntervalEntitySet(("i", ), 3),
+                                        IntervalEntitySet(("j", ), nlevel),
+                                        variant_tag=ufl.interval)
+        hedges = TensorProductEntitySet(IntervalEntitySet(("i", ), 3),
+                                        IntervalEntitySet(("j", ), nlevel+1),
+                                        variant_tag=ufl.interval)
+        vertices = TensorProductEntitySet(IntervalEntitySet(("i", ), 3),
+                                          IntervalEntitySet("j", ), nlevel+1,
+                                          variant_tag=ufl.vertex)
         self.entities = {(0, 0): cells,
                          (0, 1): hfaces,
                          (1, 0): vfaces,
