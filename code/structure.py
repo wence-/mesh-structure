@@ -1,13 +1,189 @@
 import islpy as isl
+import itertools
 from pymbolic import primitives as pym
+from pymbolic.mapper.evaluator import evaluate
 import abc
+import numpy
+import numbers
+from functools import reduce, singledispatch
+import operator
 import ufl
 
 
-class EntitySet(object):
-    def __init__(self, polyhedral_set, variant_tag):
-        self.polyhedral_set = polyhedral_set
+class lazyprop(object):
+
+    '''A read-only @property that is only evaluated once. The value is cached
+    on the object itself rather than the function or class; this should prevent
+    memory leakage.'''
+
+    def __init__(self, fget, doc=None):
+        self.fget = fget
+        self.__doc__ = doc or fget.__doc__
+        self.__name__ = fget.__name__
+        self.__module__ = fget.__module__
+
+    def __get__(self, obj, cls):
+        if obj is None:
+            return self
+        obj.__dict__[self.__name__] = result = self.fget(obj)
+        return result
+
+
+class Index(pym.Variable):
+    def __init__(self, name, lo, hi):
+        super().__init__(name)
+        assert isinstance(lo, numbers.Integral) and isinstance(hi, numbers.Integral)
+        # [lo, hi)
+        self.lo = lo
+        self.hi = hi
+
+    @lazyprop
+    def extent(self):
+        return self.hi - self.lo
+
+
+def triangular_linear_index_map(i, j, n):
+    """Given (i, j) : 0 <= i, j < n and i + j < n, produce a
+    linear index."""
+    return (n*(n-1)) // 2 - ((n - i)*(n - i - 1))//2 + i + j
+
+
+def tetrahedral_linear_index_map(i, j, k, n):
+    """Given (i, j, k): 0 <= i, j, k < n and i + j + k < n, produce a
+    linear index."""
+    ioff = (n*(n+1)*(n+2)) // 6 - ((n - i)*(n - i + 1)*(n - i + 2)) // 6
+    return ioff + triangular_linear_index_map(j, k, n - i)
+
+
+class EntitySet(metaclass=abc.ABCMeta):
+    def __init__(self, indices, constraints, variant_tag=None):
+        self.indices = tuple(indices)
+        self.constraints = tuple(constraints)
         self.variant_tag = variant_tag
+
+    @lazyprop
+    def index_extents(self):
+        """The extent of each index in the set."""
+        return tuple(i.extent for i in self.indices)
+
+    @abc.abstractmethod
+    def linear_index_map(self, index_exprs, index_order):
+        """Produce a map from indices in the set into a linear index.
+
+        :arg index_exprs: Expressions for each index the map should apply to.
+        :arg index_order: The order in which to apply the map to the indices.
+        """
+
+    @lazyprop
+    def size(self):
+        """The total number of points in the set."""
+        n = 0
+        for point in numpy.ndindex(*(i.extent for i in self.indices)):
+            bindings = dict((i.name, i.lo + p) for (i, p) in zip(self.indices, point))
+            if all(evaluate(constraint, bindings) for constraint in self.constraints):
+                n += 1
+        assert n == self.isl_set.count_val().get_num_si()
+        return n
+
+    @lazyprop
+    def isl_set(self):
+        v = isl.make_zero_and_vars(tuple(i.name for i in self.indices))
+        exprs = []
+        for index in self.indices:
+            expr = ((index.lo + v[0]).le_set(v[index.name]) &
+                    v[index.name].lt_set(index.hi + v[0]))
+            exprs.append(expr)
+
+        @singledispatch
+        def translate(expr, v):
+            raise AssertionError("Unhandled type %r" % type(expr))
+
+        @translate.register(pym.Sum)
+        def translate_sum(expr, v):
+            return operator.add(*(translate(c, v) for c in expr.children))
+
+        @translate.register(pym.Variable)
+        def translate_variable(expr, v):
+            return v[expr.name]
+
+        @translate.register(numbers.Integral)
+        def translate_number(expr, v):
+            return v[0] + expr
+
+        @translate.register(pym.Comparison)
+        def translate_comparison(expr, v):
+            left = translate(expr.left, v)
+            right = translate(expr.right, v)
+            fn = {">": "gt_set",
+                  ">=": "ge_set",
+                  "==": "eq_set",
+                  "!=": "ne_set",
+                  "<": "lt_set",
+                  "<=": "le_set"}[expr.operator]
+            return getattr(left, fn)(right)
+
+        for constraint in self.constraints:
+            expr = translate(constraint, v)
+            exprs.append(expr)
+
+        return reduce(operator.and_, exprs)
+
+
+class SimplexEntitySet(EntitySet):
+    def __init__(self, index_names, extent, variant_tag=None):
+        assert isinstance(extent, numbers.Integral)
+        self.extent = extent
+        indices = tuple(Index(name, 0, extent) for name in index_names)
+        constraints = (pym.Comparison(reduce(operator.add, indices), "<", extent), )
+        super().__init__(indices, constraints, variant_tag=variant_tag)
+
+
+class PointEntitySet(SimplexEntitySet):
+    def linear_index_map(self, index_exprs, index_order):
+        assert len(index_exprs) == 0
+        return 0
+
+
+class IntervalEntitySet(SimplexEntitySet):
+    def linear_index_map(self, index_exprs, index_order):
+        i, = index_exprs
+        return i
+
+
+class TriangleEntitySet(SimplexEntitySet):
+    def linear_index_map(self, index_exprs, index_order):
+        """index_order is ignored (just swap the order in index_exprs)"""
+        i, j = index_exprs
+        return triangular_linear_index_map(i, j, self.extent)
+
+
+class TetrahedronEntitySet(SimplexEntitySet):
+    def linear_index_map(self, index_exprs, index_order):
+        """index_order is ignored (just swap the order in index_exprs)"""
+        i, j, k = index_exprs
+        return tetrahedral_linear_index_map(i, j, k, self.extent)
+
+
+class TensorProductEntitySet(EntitySet):
+    def __init__(self, *factors, variant_tag=None):
+        self.factors = tuple(factors)
+        indices = itertools.chain(*(f.indices for f in self.factors))
+        assert len(set(i.name for i in indices)) == len(indices), "Must provide unique index names"
+        constraints = itertools.chain(*(f.constraints for f in self.factors))
+        super().__init__(indices, constraints, variant_tag=variant_tag)
+
+    def linear_index_map(self, index_exprs, index_order):
+        assert len(index_exprs) == sum(len(f.indices) for f in self.factors)
+        assert len(index_order) == len(self.factors)
+        factors = tuple(self.factors[i] for i in index_order)
+        strides = tuple(numpy.cumprod((1, ) + tuple(f.size for f in reversed(factors)))[:-1][::-1])
+        expr = 0
+        for factor, stride in zip(factors, strides):
+            nindex = len(factor.indices)
+            index_expr = index_exprs[:nindex]
+            index_exprs = index_exprs[nindex:]
+            expr = expr + factor.linear_index_map(index_expr, None)*stride
+        return expr
 
 
 class StructureBase(metaclass=abc.ABCMeta):
@@ -29,25 +205,18 @@ class Extrusion(StructureBase):
     def __init__(self, nlevel):
         super().__init__()
         self.nlevel = nlevel
-        vars = isl.make_zero_and_vars("i,j")
         # Extruded triangular prism
-        cells = EntitySet(vars[0].le_set(vars["i"]) & vars["i"].lt_set(0 + nlevel),
-                          ufl.TensorProductCell(ufl.triangle, ufl.interval))
-        hfaces = EntitySet(vars[0].le_set(vars["i"]) & vars["i"].le_set(0 + nlevel),
-                           ufl.triangle)
-        vfaces = EntitySet(vars[0].le_set(vars["i"]) & vars["i"].lt_set(0 + nlevel)
-                           & vars[0].le_set(vars["j"]) & vars["j"].lt_set(vars[0] + 3),
-                           ufl.quadrilateral)
-        hedges = EntitySet(vars[0].le_set(vars["i"]) & vars["i"].le_set(0 + nlevel)
-                           & vars[0].le_set(vars["j"]) & vars["j"].lt_set(vars[0] + 3),
-                           ufl.interval)
-        vedges = EntitySet(vars[0].le_set(vars["i"]) & vars["i"].lt_set(0 + nlevel)
-                           & vars[0].le_set(vars["j"]) & vars["j"].lt_set(vars[0] + 3),
-                           ufl.interval)
-        vertices = EntitySet(vars[0].le_set(vars["i"]) & vars["i"].le_set(0 + nlevel)
-                             & vars[0].le_set(vars["j"]) & vars["j"].lt_set(vars[0] + 3),
-                             ufl.vertex)
-
+        cells = TensorProductEntitySet(TriangleEntitySet(("i", "j"), 1,
+                                                         variant_tag=ufl.triangle),
+                                       IntervalEntitySet(("k", ), nlevel,
+                                                         variant_tag=ufl.interval),
+                                       variant_tag=ufl.TensorProductCell(ufl.triangle, ufl.interval))
+        hfaces = TensorProductEntitySet(TriangleEntitySet(("i", "j"), 1,
+                                                         variant_tag=ufl.triangle),
+                                       IntervalEntitySet(("k", ), nlevel+1,
+                                                         variant_tag=ufl.interval),
+                                       variant_tag=ufl.TensorProductCell(ufl.triangle, ufl.point))
+        vfaces = TensorProductEntitySet(IntervalEntitySet
         self.entities = {(0, 0): cells,
                          (0, 1): hfaces,
                          (1, 0): vfaces,
