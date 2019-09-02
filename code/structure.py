@@ -164,6 +164,13 @@ class TetrahedronEntitySet(SimplexEntitySet):
         return tetrahedral_linear_index_map(i, j, k, self.extent)
 
 
+# This would allow us to represent entities in a block-structured grid
+# in a staggered fashion, I think. Consider a 2D quad, we need
+#
+# cells = TensorProductEntitySet(IntervalEntitySet(i, N), IntervalEntitySet(j, N))
+# vertices = TensorProductEntitySet(IntervalEntitySet(k, N+1), IntervalEntitySet(l, N+1))
+# | faces = TensorProductEntitySet(IntervalEntitySet(k, N+1), IntervalEntitySet(j, N))
+# - faces = TensorProductEntitySet(IntervalEntitySet(i, N), IntervalEntitySet(l+1, N+1))
 class TensorProductEntitySet(EntitySet):
     def __init__(self, *factors, variant_tag=None):
         self.factors = tuple(factors)
