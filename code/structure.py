@@ -426,6 +426,10 @@ VERTEX = object()
 
 
 class HypercubeRefinement(StructureBase):
+
+    """Representation of structured refinement of a hypercube.
+
+    :arg cells_per_dimension: Number of cells in each direction."""
     def __init__(self, *cells_per_dimension):
         self.entities = {}
         cells = tuple(IntervalEntitySet(n, variant_tag=CELL) for n in cells_per_dimension)
@@ -485,11 +489,31 @@ class HypercubeRefinement(StructureBase):
         return tuple(exprs)
 
     def subentity_map(self, eset, sset, indices, subentity):
+        """Map some indices on a given entity set into indices on an
+        immediately neighbouring subentity set, picking out a given
+        subentity.
+
+        :arg eset: The source entity set
+        :arg sset: The target entity set, with codimension 1 greater.
+        :arg indices: Indices into eset
+        :arg subentity: Which subentity in sset from the map to pick
+            out.
+        :returns: Indices into sset.
+        """
         candidates = self.cone(indices, eset)
         cone, = (cone for cone, candidate in candidates if candidate == sset)
         return cone[subentity]
 
     def dual_subentity_map(self, sset, eset, indices):
+        """Map some indices on a given entity set into indices on an
+        immediately neighbouring super-entity set.
+
+        :arg sset: The source entity set
+        :arg eset: The target entity set, with codimension 1 less.
+        :arg indices: Indices into eset
+        :returns: A tuple of indices into eset which index all the
+            neighbouring points of the point provided in sset.
+        """
         candidates = self.support(indices, sset)
         support, = (support for support, candidate in candidates if candidate == eset)
         return support
