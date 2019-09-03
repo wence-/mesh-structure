@@ -212,18 +212,27 @@ class TensorProductEntitySet(EntitySet):
         indices = tuple(itertools.chain(*(f.indices for f in self.factors)))
         assert len(set(i.name for i in indices)) == len(indices), "Must provide unique index names"
         constraints = tuple(itertools.chain(*(f.constraints for f in self.factors)))
-        super().__init__(indices, constraints, variant_tag=variant_tag)
+        codimension = sum(f.codimension for f in self.factors)
+        super().__init__(indices, constraints, codimension, variant_tag=variant_tag)
 
     def linear_index_map(self, index_exprs, index_order):
         assert len(index_exprs) == sum(len(f.indices) for f in self.factors)
-        assert len(index_order) == len(self.factors)
-        factors = tuple(self.factors[i] for i in index_order)
-        strides = tuple(numpy.cumprod((1, ) + tuple(f.size for f in reversed(factors)))[:-1][::-1][index_order])
-        expr = 0
-        for factor, stride in zip(factors, strides):
+        assert len(set(index_order)) == len(self.factors)
+
+        # FIXME: Debug this more thoroughly
+        indices = index_exprs
+        index_exprs = []
+        for factor in self.factors:
             nindex = len(factor.indices)
-            index_expr = index_exprs[:nindex]
-            index_exprs = index_exprs[nindex:]
+            index_exprs.append(indices[:nindex])
+            indices = indices[nindex:]
+        index_exprs = tuple(index_exprs[i] for i in index_order)
+        factors = tuple(self.factors[i] for i in index_order)
+        strides = numpy.cumprod((1, ) + tuple(f.size for f in reversed(factors)))
+        strides = tuple(reversed(strides[:-1]))
+
+        expr = 0
+        for stride, index_expr, factor in zip(strides, index_exprs, self.factors):
             expr = expr + factor.linear_index_map(index_expr, None)*stride
         return expr
 
