@@ -5,7 +5,7 @@ from pymbolic.mapper.evaluator import evaluate
 import abc
 import numpy
 import numbers
-from functools import reduce, singledispatch
+from functools import reduce, singledispatch, partial
 import operator
 import ufl
 
@@ -30,12 +30,20 @@ class lazyprop(object):
 
 
 class Index(pym.Variable):
-    def __init__(self, name, lo, hi):
-        super().__init__(name)
+    count = itertools.count()
+
+    def __init__(self, lo, hi):
+        super().__init__("i{}".format(next(self.count)))
         assert isinstance(lo, numbers.Integral) and isinstance(hi, numbers.Integral)
         # [lo, hi)
         self.lo = lo
         self.hi = hi
+
+    def __str__(self):
+        return self.name
+
+    def __repr__(self):
+        return "Index({}, lo={}, hi={})".format(self.name, self.lo, self.hi)
 
     @lazyprop
     def extent(self):
@@ -56,6 +64,12 @@ def tetrahedral_linear_index_map(i, j, k, n):
 
 
 class EntitySet(metaclass=abc.ABCMeta):
+    """A representation of some set of entities.
+
+    :arg indices: :class:`Index` objects encoding points in the set.
+    :arg constraints: constraints on the indices (expressions), must
+        be expressible in Presburger arithmetic.
+    :arg variant_tag: Arbitrary data used to distinguish this set."""
     def __init__(self, indices, constraints, variant_tag=None):
         self.indices = tuple(indices)
         self.constraints = tuple(constraints)
@@ -68,7 +82,7 @@ class EntitySet(metaclass=abc.ABCMeta):
 
     @abc.abstractmethod
     def linear_index_map(self, index_exprs, index_order):
-        """Produce a map from indices in the set into a linear index.
+        """A map from indices in the set into a linear index.
 
         :arg index_exprs: Expressions for each index the map should apply to.
         :arg index_order: The order in which to apply the map to the indices.
@@ -87,6 +101,7 @@ class EntitySet(metaclass=abc.ABCMeta):
 
     @lazyprop
     def isl_set(self):
+        """An ISLPY representation of the index set for this entity set."""
         v = isl.make_zero_and_vars(tuple(i.name for i in self.indices))
         exprs = []
         for index in self.indices:
@@ -126,31 +141,68 @@ class EntitySet(metaclass=abc.ABCMeta):
             expr = translate(constraint, v)
             exprs.append(expr)
 
+        if len(exprs) == 0:
+            # Hack!
+            return v[0].eq_set(v[0])
         return reduce(operator.and_, exprs)
+
+    def __str__(self):
+        return "{}({})".format(type(self).__name__, self.isl_set)
+
+    __repr__ = __str__
 
 
 class SimplexEntitySet(EntitySet):
-    def __init__(self, index_names, extent, variant_tag=None):
+    """An entity set describing some number of simplices.
+
+    :arg extent: Max extent in each direction.
+
+    Produces an index set with
+
+    0 <= indices < extent, sum(indices) < extent
+
+    Where len(indices) == dimension
+    """
+    def __init__(self, extent, variant_tag=None):
         assert isinstance(extent, numbers.Integral)
         self.extent = extent
-        indices = tuple(Index(name, 0, extent) for name in index_names)
-        constraints = (pym.Comparison(reduce(operator.add, indices), "<", extent), )
+        indices = tuple(Index(0, extent) for _ in range(self.dimension))
+        if indices:
+            constraints = (pym.Comparison(reduce(operator.add, indices), "<", extent), )
+        else:
+            constraints = ()
         super().__init__(indices, constraints, variant_tag=variant_tag)
+
+    @abc.abstractproperty
+    def dimension(self):
+        pass
 
 
 class PointEntitySet(SimplexEntitySet):
+
+    """A representation of a single (zero-dimensional) point."""
+
+    dimension = 0
+
     def linear_index_map(self, index_exprs, index_order):
         assert len(index_exprs) == 0
         return 0
 
 
 class IntervalEntitySet(SimplexEntitySet):
+
+    """A representation of some number of intervals."""
+    dimension = 1
+
     def linear_index_map(self, index_exprs, index_order):
         i, = index_exprs
         return i
 
 
 class TriangleEntitySet(SimplexEntitySet):
+    """A representation of entities with a "triangle" constraint."""
+    dimension = 2
+
     def linear_index_map(self, index_exprs, index_order):
         """index_order is ignored (just swap the order in index_exprs)"""
         i, j = index_exprs
@@ -158,6 +210,10 @@ class TriangleEntitySet(SimplexEntitySet):
 
 
 class TetrahedronEntitySet(SimplexEntitySet):
+    """A representation of entities with a "tetrahedron" constraint."""
+
+    dimension = 3
+
     def linear_index_map(self, index_exprs, index_order):
         """index_order is ignored (just swap the order in index_exprs)"""
         i, j, k = index_exprs
@@ -172,18 +228,25 @@ class TetrahedronEntitySet(SimplexEntitySet):
 # | faces = TensorProductEntitySet(IntervalEntitySet(k, N+1), IntervalEntitySet(j, N))
 # - faces = TensorProductEntitySet(IntervalEntitySet(i, N), IntervalEntitySet(l+1, N+1))
 class TensorProductEntitySet(EntitySet):
+    """A representation of a set of indices with tensor product
+    structure.
+
+    :arg factors: index sets for the directions in the tensor product.
+    :arg variant_tag: Arbitrary distinguishing tag."""
     def __init__(self, *factors, variant_tag=None):
         self.factors = tuple(factors)
-        indices = itertools.chain(*(f.indices for f in self.factors))
+        if any(isinstance(f, TensorProductEntitySet) for f in self.factors):
+            raise ValueError("Can't deal with nested tensor products sorry")
+        indices = tuple(itertools.chain(*(f.indices for f in self.factors)))
         assert len(set(i.name for i in indices)) == len(indices), "Must provide unique index names"
-        constraints = itertools.chain(*(f.constraints for f in self.factors))
+        constraints = tuple(itertools.chain(*(f.constraints for f in self.factors)))
         super().__init__(indices, constraints, variant_tag=variant_tag)
 
     def linear_index_map(self, index_exprs, index_order):
         assert len(index_exprs) == sum(len(f.indices) for f in self.factors)
         assert len(index_order) == len(self.factors)
         factors = tuple(self.factors[i] for i in index_order)
-        strides = tuple(numpy.cumprod((1, ) + tuple(f.size for f in reversed(factors)))[:-1][::-1])
+        strides = tuple(numpy.cumprod((1, ) + tuple(f.size for f in reversed(factors)))[:-1][::-1][index_order])
         expr = 0
         for factor, stride in zip(factors, strides):
             nindex = len(factor.indices)
@@ -192,9 +255,13 @@ class TensorProductEntitySet(EntitySet):
             expr = expr + factor.linear_index_map(index_expr, None)*stride
         return expr
 
+    def __str__(self):
+        factors = ", ".join(str(f) for f in self.factors)
+        return "TensorProductEntitySet({}: {})".format(factors, self.isl_set)
+
 
 class StructureBase(metaclass=abc.ABCMeta):
-
+    """Object representing some structured mesh pattern."""
     @abc.abstractmethod
     def entity_variants(self, codim=None):
         pass
@@ -214,35 +281,35 @@ class Extrusion(StructureBase):
         self.nlevel = nlevel
         if base in {ufl.triangle}:
             # OK
-            base_cell = PointEntitySet((), 1)
-            base_edge = IntervalEntitySet(("e", ), base.num_edges())
-            base_vertex = IntervalEntitySet(("v", ), base.num_vertices())
+            base_cell = PointEntitySet(1)
+            base_edge = IntervalEntitySet(base.num_edges())
+            base_vertex = IntervalEntitySet(base.num_vertices())
         else:
             # But then what about if the base thing is structured?
             raise NotImplementedError()
 
         cells = TensorProductEntitySet(base_cell,
-                                       IntervalEntitySet(("i", ), nlevel),
+                                       IntervalEntitySet(nlevel),
                                        variant_tag=ufl.TensorProductCell(base,
                                                                          ufl.interval))
         hfaces = TensorProductEntitySet(base_cell,
-                                        IntervalEntitySet(("i", ), nlevel+1),
+                                        IntervalEntitySet(nlevel+1),
                                         variant_tag=ufl.TensorProductCell(base,
                                                                           ufl.vertex))
         vfaces = TensorProductEntitySet(base_edge,
-                                        IntervalEntitySet(("j", ), nlevel),
+                                        IntervalEntitySet(nlevel),
                                         variant_tag=ufl.TensorProductCell(ufl.interval,
                                                                           ufl.interval))
         vedges = TensorProductEntitySet(base_vertex,
-                                        IntervalEntitySet(("j", ), nlevel),
+                                        IntervalEntitySet(nlevel),
                                         variant_tag=ufl.TensorProductCell(ufl.vertex,
                                                                           ufl.interval))
         hedges = TensorProductEntitySet(base_edge,
-                                        IntervalEntitySet(("j", ), nlevel+1),
+                                        IntervalEntitySet(nlevel+1),
                                         variant_tag=ufl.TensorProductCell(ufl.interval,
                                                                           ufl.vertex))
         vertices = TensorProductEntitySet(base_vertex,
-                                          IntervalEntitySet("j", ), nlevel+1,
+                                          IntervalEntitySet(nlevel+1),
                                           variant_tag=ufl.TensorProductCell(ufl.vertex,
                                                                             ufl.vertex))
         self.entities = {(0, 0): cells,
@@ -351,3 +418,87 @@ class Extrusion(StructureBase):
             return self.dual_maps_[(sset, eset)](multiindex)
         except KeyError:
             raise ValueError("No dual map between {} and {}".format(sset, eset))
+
+# TODO: use an enum
+CELL = object()
+VERTEX = object()
+
+
+class HypercubeRefinement(StructureBase):
+    def __init__(self, *cells_per_dimension):
+        cells = tuple(IntervalEntitySet(n, variant_tag=CELL) for n in cells_per_dimension)
+        vertices = tuple(IntervalEntitySet(n+1, variant_tag=VERTEX) for n in cells_per_dimension)
+
+        options = tuple(zip(cells, vertices))
+        dimension = len(cells_per_dimension)
+        entities = {}
+
+        for codim in range(dimension+1):
+            ents = []
+            possible = tuple([0] * (dimension - codim) + [1] * codim)
+            seen = set()
+            # Sets of entities of given codim are created by selecting cell and vertex intervals
+            # such that n_vertex_intervals == codim
+            for perm in itertools.permutations(possible):
+                if perm in seen:
+                    continue
+                seen.add(perm)
+                ents.append(TensorProductEntitySet(*(option[i] for i, option in zip(perm, options))))
+            entities[codim] = tuple(ents)
+        self.entities = entities
+
+    def cone(self, indices, eset):
+        """Given indices into an entity set, produce the index
+        expressions for the cone of the entity, that is, the entities
+        with codimension 1 greater.
+
+        :arg indices: The indices describing a point in the set.
+        :arg eset: The entity set
+        :returns: A tuple of two-tuples, each of the form
+            (([index_expr1, ...]), codim+1-set)
+        """
+        assert len(indices) == len(eset.factors)
+        codim = sum(f.variant_tag == VERTEX for f in eset.factors) + 1
+        targets = self.entity_variants(codim=codim)
+        exprs = []
+        for target in targets:
+            expr = zip(*((index, index if parent.variant_tag == child.variant_tag else index + 1)
+                         for index, parent, child in zip(indices, eset.factors, target.factors)))
+            exprs.append((tuple(expr), target))
+        return tuple(exprs)
+
+    def support(self, indices, eset):
+        """Given indices into an entity set, produce index expression
+        for the support of the entity, that is, the entities with
+        codimension 1 less.
+
+        :arg indices: The indices describing a point in the set.
+        :arg eset: The entity set
+        :returns: A tuple of two-tuples, each of the form
+            (([index_expr1, ...]), codim-1-set)
+        """
+        assert len(indices) == len(eset.factors)
+        codim = sum(f.variant_tag == VERTEX for f in eset.factors) - 1
+        targets = self.entity_variants(codim=codim)
+        exprs = []
+        for target in targets:
+            expr = zip(*((index, index if parent.variant_tag == child.variant_tag else index - 1)
+                         for index, parent, child in zip(indices, eset.factors, target.factors)))
+            exprs.append((tuple(expr), target))
+        return tuple(exprs)
+
+    def subentity_map(self, eset, sset, indices, subentity):
+        candidates = self.cone(indices, eset)
+        cone, = (cone for cone, candidate in candidates if candidate == sset)
+        return cone[subentity]
+
+    def dual_subentity_map(self, sset, eset, indices):
+        candidates = self.support(indices, sset)
+        support, = (support for support, candidate in candidates if candidate == eset)
+        return support
+
+    def entity_variants(self, codim=None):
+        if codim is None:
+            return tuple(self.entities.values())
+        else:
+            return self.entities.get(codim, ())
