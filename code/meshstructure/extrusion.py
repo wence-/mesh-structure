@@ -16,6 +16,7 @@ class Extrusion(StructureBase):
             base_cell = PointEntitySet(1)
             base_edge = IntervalEntitySet(base.num_edges())
             base_vertex = IntervalEntitySet(base.num_vertices())
+            self.embedding_dimension = 3
         else:
             # But then what about if the base thing is structured?
             raise NotImplementedError()

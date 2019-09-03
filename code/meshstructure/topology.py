@@ -9,7 +9,9 @@ import numpy
 from pymbolic import primitives as pym
 from pymbolic.mapper.evaluator import evaluate
 
+from .symbolics import Index
 from .utils import lazyprop
+
 
 __all__ = ("PointEntitySet", "IntervalEntitySet", "TriangleEntitySet", "TetrahedronEntitySet",
            "TensorProductEntitySet")
@@ -21,11 +23,13 @@ class EntitySet(metaclass=abc.ABCMeta):
     :arg indices: :class:`Index` objects encoding points in the set.
     :arg constraints: constraints on the indices (expressions), must
         be expressible in Presburger arithmetic.
+    :arg The codimension of the entities this entityset represents
     :arg variant_tag: Arbitrary data used to distinguish this set."""
-    def __init__(self, indices, constraints, variant_tag=None):
+    def __init__(self, indices, constraints, codimension, variant_tag=None):
         self.indices = tuple(indices)
         self.constraints = tuple(constraints)
         self.variant_tag = variant_tag
+        self.codimension = codimension
 
     @lazyprop
     def index_extents(self):
@@ -128,7 +132,7 @@ class SimplexEntitySet(EntitySet):
 
     Where len(indices) == dimension
     """
-    def __init__(self, extent, variant_tag=None):
+    def __init__(self, extent, codimension, variant_tag=None):
         assert isinstance(extent, numbers.Integral)
         self.extent = extent
         indices = tuple(Index(0, extent) for _ in range(self.dimension))
@@ -136,9 +140,10 @@ class SimplexEntitySet(EntitySet):
             constraints = (pym.Comparison(reduce(operator.add, indices), "<", extent), )
         else:
             constraints = ()
-        super().__init__(indices, constraints, variant_tag=variant_tag)
+        super().__init__(indices, constraints, codimension, variant_tag=variant_tag)
 
-    @abc.abstractproperty
+    @property
+    @abc.abstractmethod
     def dimension(self):
         pass
 
@@ -162,6 +167,15 @@ class IntervalEntitySet(SimplexEntitySet):
     def linear_index_map(self, index_exprs, index_order):
         i, = index_exprs
         return i
+
+
+class PeriodicIntervalEntitySet(SimplexEntitySet):
+
+    dimension = 1
+
+    def linear_index_map(self, index_exprs, index_order):
+        i, = index_exprs
+        return i % self.extent
 
 
 class TriangleEntitySet(SimplexEntitySet):
@@ -220,6 +234,12 @@ class TensorProductEntitySet(EntitySet):
 
 class StructureBase(metaclass=abc.ABCMeta):
     """Object representing some structured mesh pattern."""
+
+    @property
+    @abc.abstractmethod
+    def embedding_dimension(self):
+        pass
+
     @abc.abstractmethod
     def entity_variants(self, codim=None):
         pass

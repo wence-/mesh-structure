@@ -4,6 +4,8 @@ from enum import Enum
 import numpy
 
 from .topology import IntervalEntitySet, StructureBase, TensorProductEntitySet
+from .utils import lazyprop
+
 
 __all__ = ("HypercubeRefinement", )
 
@@ -20,11 +22,12 @@ class HypercubeRefinement(StructureBase):
     :arg cells_per_dimension: Number of cells in each direction."""
     def __init__(self, *cells_per_dimension):
         self.entities = {}
-        cells = tuple(IntervalEntitySet(n, variant_tag=Tag.CELL)
+        cells = tuple(IntervalEntitySet(n, codimension=0, variant_tag=Tag.CELL)
                       for n in cells_per_dimension)
-        vertices = tuple(IntervalEntitySet(n+1, variant_tag=Tag.VERTEX)
+        vertices = tuple(IntervalEntitySet(n+1, codimension=1, variant_tag=Tag.VERTEX)
                          for n in cells_per_dimension)
         dimension = len(cells_per_dimension)
+        self.embedding_dimension = dimension
         for codim in range(dimension+1):
             ents = []
             # Sets of entities of given codim are created by selecting
@@ -37,6 +40,10 @@ class HypercubeRefinement(StructureBase):
                 factors[idx] = numpy.asarray(vertices)[idx]
                 ents.append(TensorProductEntitySet(*factors))
             self.entities[codim] = tuple(ents)
+
+    @lazyprop
+    def embedding_dimension(self):
+        pass
 
     def cone(self, indices, eset):
         """Given indices into an entity set, produce the index
