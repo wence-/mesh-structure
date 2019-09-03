@@ -419,6 +419,7 @@ class Extrusion(StructureBase):
         except KeyError:
             raise ValueError("No dual map between {} and {}".format(sset, eset))
 
+
 # TODO: use an enum
 CELL = object()
 VERTEX = object()
@@ -426,26 +427,22 @@ VERTEX = object()
 
 class HypercubeRefinement(StructureBase):
     def __init__(self, *cells_per_dimension):
+        self.entities = {}
         cells = tuple(IntervalEntitySet(n, variant_tag=CELL) for n in cells_per_dimension)
         vertices = tuple(IntervalEntitySet(n+1, variant_tag=VERTEX) for n in cells_per_dimension)
-
-        options = tuple(zip(cells, vertices))
         dimension = len(cells_per_dimension)
-        entities = {}
-
         for codim in range(dimension+1):
             ents = []
-            possible = tuple([0] * (dimension - codim) + [1] * codim)
-            seen = set()
-            # Sets of entities of given codim are created by selecting cell and vertex intervals
-            # such that n_vertex_intervals == codim
-            for perm in itertools.permutations(possible):
-                if perm in seen:
-                    continue
-                seen.add(perm)
-                ents.append(TensorProductEntitySet(*(option[i] for i, option in zip(perm, options))))
-            entities[codim] = tuple(ents)
-        self.entities = entities
+            # Sets of entities of given codim are created by selecting
+            # cell and vertex intervals such that n_vertex_intervals  == codim
+            #
+            # This is a multiset permutation of [0] * (dimension-codim) + [1] * codim
+            for vtx in itertools.combinations(range(dimension), codim):
+                idx = list(vtx)
+                factors = numpy.asarray(cells)
+                factors[idx] = numpy.asarray(vertices)[idx]
+                ents.append(TensorProductEntitySet(*factors))
+            self.entities[codim] = tuple(ents)
 
     def cone(self, indices, eset):
         """Given indices into an entity set, produce the index
