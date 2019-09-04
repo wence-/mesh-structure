@@ -3,8 +3,8 @@ from enum import Enum
 
 import numpy
 
-from .topology import IntervalEntitySet, StructureBase, TensorProductEntitySet
-from .utils import lazyprop
+from .topology import IntervalEntitySet, MeshTopology, TensorProductEntitySet
+from .utils import lazyattr
 
 
 __all__ = ("HypercubeRefinement", )
@@ -15,7 +15,7 @@ class Tag(Enum):
     VERTEX = 1
 
 
-class HypercubeRefinement(StructureBase):
+class HypercubeRefinement(MeshTopology):
 
     """Representation of structured refinement of a hypercube.
 
@@ -41,7 +41,7 @@ class HypercubeRefinement(StructureBase):
                 ents.append(TensorProductEntitySet(*factors))
             self.entities[codim] = tuple(ents)
 
-    @lazyprop
+    @lazyattr
     def embedding_dimension(self):
         pass
 

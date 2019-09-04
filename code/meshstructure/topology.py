@@ -10,7 +10,7 @@ from pymbolic import primitives as pym
 from pymbolic.mapper.evaluator import evaluate
 
 from .symbolics import Index
-from .utils import lazyprop
+from .utils import lazyattr
 
 
 __all__ = ("PointEntitySet", "IntervalEntitySet", "TriangleEntitySet", "TetrahedronEntitySet",
@@ -31,7 +31,7 @@ class EntitySet(metaclass=abc.ABCMeta):
         self.variant_tag = variant_tag
         self.codimension = codimension
 
-    @lazyprop
+    @lazyattr
     def index_extents(self):
         """The extent of each index in the set."""
         return tuple(i.extent for i in self.indices)
@@ -44,7 +44,7 @@ class EntitySet(metaclass=abc.ABCMeta):
         :arg index_order: The order in which to apply the map to the indices.
         """
 
-    @lazyprop
+    @lazyattr
     def size(self):
         """The total number of points in the set."""
         n = 0
@@ -55,7 +55,7 @@ class EntitySet(metaclass=abc.ABCMeta):
         assert n == self.isl_set.count_val().get_num_si()
         return n
 
-    @lazyprop
+    @lazyattr
     def isl_set(self):
         """An ISLPY representation of the index set for this entity set."""
         v = isl.make_zero_and_vars(tuple(i.name for i in self.indices))
@@ -241,7 +241,7 @@ class TensorProductEntitySet(EntitySet):
         return "TensorProductEntitySet({}: {})".format(factors, self.isl_set)
 
 
-class StructureBase(metaclass=abc.ABCMeta):
+class MeshTopology(metaclass=abc.ABCMeta):
     """Object representing some structured mesh pattern."""
 
     @property

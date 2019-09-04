@@ -1,7 +1,9 @@
-import numbers
 import itertools
+import numbers
+
 from pymbolic import primitives as pym
-from .utils import lazyprop
+
+from .utils import lazyattr
 
 
 class Index(pym.Variable):
@@ -20,6 +22,6 @@ class Index(pym.Variable):
     def __repr__(self):
         return "Index({}, lo={}, hi={})".format(self.name, self.lo, self.hi)
 
-    @lazyprop
+    @lazyattr
     def extent(self):
         return self.hi - self.lo

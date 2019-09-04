@@ -1,13 +1,13 @@
 import ufl
 
-from .topology import (IntervalEntitySet, PointEntitySet, StructureBase,
+from .topology import (IntervalEntitySet, MeshTopology, PointEntitySet,
                        TensorProductEntitySet)
 
 
 __all__ = ("Extrusion", )
 
 
-class Extrusion(StructureBase):
+class Extrusion(MeshTopology):
     def __init__(self, base, nlevel):
         super().__init__()
         self.nlevel = nlevel

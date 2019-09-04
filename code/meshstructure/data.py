@@ -4,7 +4,10 @@ from enum import Enum
 import numpy
 
 from .topology import IntervalEntitySet, TensorProductEntitySet
-from .utils import lazyprop
+from .utils import lazyattr
+
+
+__all__ = ("DataLayout", )
 
 
 class Tag(Enum):
@@ -29,11 +32,11 @@ class DataLayout(object):
                                            for eset in esets))
                              for codim, esets in topology.entities.items())
 
-    @lazyprop
+    @lazyattr
     def size(self):
         return sum(d.size for d in itertools.chain(*self.datasets.values()))
 
-    @lazyprop
+    @lazyattr
     def ranges(self):
         sizes = []
         for codim in range(self.topology.embedding_dimension + 1):
