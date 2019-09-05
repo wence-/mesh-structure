@@ -1,5 +1,6 @@
 import itertools
 import numbers
+from collections import namedtuple
 
 from pymbolic import primitives as pym
 
@@ -25,3 +26,6 @@ class Index(pym.Variable):
     @lazyattr
     def extent(self):
         return self.hi - self.lo
+
+
+MultiIndex = namedtuple("MultiIndex", ("indices", "entity_set"))

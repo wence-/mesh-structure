@@ -15,7 +15,6 @@ class Tag(Enum):
     DATA_LAYOUT = 1
 
 
-# FIXME: I think this is the wrong model.
 class DataSet(TensorProductEntitySet):
     def __init__(self, entity_set, dofs_per_entity):
         self.entity_set = entity_set
@@ -39,7 +38,7 @@ class DataLayout(object):
     @lazyattr
     def ranges(self):
         sizes = []
-        for codim in range(self.topology.embedding_dimension + 1):
+        for codim in range(self.topology.dimension + 1):
             sizes.append(sum(d.size for d in itertools.chain(*self.datasets.values())
                              if d.codimension == codim))
         return (0, ) + tuple(numpy.cumsum(sizes))

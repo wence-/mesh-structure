@@ -9,7 +9,7 @@ import numpy
 from pymbolic import primitives as pym
 from pymbolic.mapper.evaluator import evaluate
 
-from .symbolics import Index
+from .symbolics import Index, MultiIndex
 from .utils import lazyattr
 
 
@@ -23,12 +23,14 @@ class EntitySet(metaclass=abc.ABCMeta):
     :arg indices: :class:`Index` objects encoding points in the set.
     :arg constraints: constraints on the indices (expressions), must
         be expressible in Presburger arithmetic.
-    :arg The codimension of the entities this entityset represents
+    :arg dimension: The dimension of the entities this entity set represents.
+    :arg codimension: The codimension of the entities this entity set represents.
     :arg variant_tag: Arbitrary data used to distinguish this set."""
-    def __init__(self, indices, constraints, codimension, variant_tag=None):
+    def __init__(self, indices, constraints, dimension, codimension, variant_tag=None):
         self.indices = tuple(indices)
         self.constraints = tuple(constraints)
         self.variant_tag = variant_tag
+        self.dimension = dimension
         self.codimension = codimension
 
     @lazyattr
@@ -37,12 +39,19 @@ class EntitySet(metaclass=abc.ABCMeta):
         return tuple(i.extent for i in self.indices)
 
     @abc.abstractmethod
-    def linear_index_map(self, index_exprs, index_order):
+    def linear_index_map(self, index_exprs):
         """A map from indices in the set into a linear index.
 
         :arg index_exprs: Expressions for each index the map should apply to.
-        :arg index_order: The order in which to apply the map to the indices.
         """
+
+    def boundaries(self):
+        """Return subsets of this entity set on the boundary of the polyhedral domain."""
+        raise NotImplementedError
+
+    def interior(self):
+        """Return a subset of this entity set on the interior of the polyhedral domain."""
+        raise NotImplementedError
 
     @lazyattr
     def size(self):
@@ -132,58 +141,30 @@ class SimplexEntitySet(EntitySet):
 
     Where len(indices) == dimension
     """
-    def __init__(self, extent, codimension, variant_tag=None):
+    def __init__(self, extent, dimension, codimension, variant_tag=None):
         assert isinstance(extent, numbers.Integral)
         self.extent = extent
-        indices = tuple(Index(0, extent) for _ in range(self.dimension))
+        indices = tuple(Index(0, extent) for _ in range(dimension))
         if indices:
             constraints = (pym.Comparison(reduce(operator.add, indices), "<", extent), )
         else:
             constraints = ()
-        super().__init__(indices, constraints, codimension, variant_tag=variant_tag)
-
-    @property
-    @abc.abstractmethod
-    def dimension(self):
-        pass
-
-
-class PointEntitySet(SimplexEntitySet):
-
-    """A representation of a single (zero-dimensional) point."""
-
-    dimension = 0
-
-    def linear_index_map(self, index_exprs, index_order):
-        assert len(index_exprs) == 0
-        return 0
+        super().__init__(indices, constraints, dimension, codimension, variant_tag=variant_tag)
 
 
 class IntervalEntitySet(SimplexEntitySet):
 
     """A representation of some number of intervals."""
-    dimension = 1
 
-    def linear_index_map(self, index_exprs, index_order):
+    def linear_index_map(self, index_exprs):
         i, = index_exprs
         return i
 
 
-class PeriodicIntervalEntitySet(SimplexEntitySet):
-
-    dimension = 1
-
-    def linear_index_map(self, index_exprs, index_order):
-        i, = index_exprs
-        return i % self.extent
-
-
 class TriangleEntitySet(SimplexEntitySet):
     """A representation of entities with a "triangle" constraint."""
-    dimension = 2
 
-    def linear_index_map(self, index_exprs, index_order):
-        """index_order is ignored (just swap the order in index_exprs)"""
+    def linear_index_map(self, index_exprs):
         i, j = index_exprs
         return triangular_linear_index_map(i, j, self.extent)
 
@@ -191,10 +172,7 @@ class TriangleEntitySet(SimplexEntitySet):
 class TetrahedronEntitySet(SimplexEntitySet):
     """A representation of entities with a "tetrahedron" constraint."""
 
-    dimension = 3
-
-    def linear_index_map(self, index_exprs, index_order):
-        """index_order is ignored (just swap the order in index_exprs)"""
+    def linear_index_map(self, index_exprs):
         i, j, k = index_exprs
         return tetrahedral_linear_index_map(i, j, k, self.extent)
 
@@ -213,26 +191,20 @@ class TensorProductEntitySet(EntitySet):
         assert len(set(i.name for i in indices)) == len(indices), "Must provide unique index names"
         constraints = tuple(itertools.chain(*(f.constraints for f in self.factors)))
         codimension = sum(f.codimension for f in self.factors)
-        super().__init__(indices, constraints, codimension, variant_tag=variant_tag)
+        dimension = sum(f.dimension for f in self.factors)
+        super().__init__(indices, constraints, dimension, codimension, variant_tag=variant_tag)
 
-    def linear_index_map(self, index_exprs, index_order):
+    def linear_index_map(self, index_exprs):
         assert len(index_exprs) == sum(len(f.indices) for f in self.factors)
-        assert len(set(index_order)) == len(self.factors)
 
-        # FIXME: Debug this more thoroughly
-        indices = index_exprs
-        index_exprs = []
-        for factor in self.factors:
-            nindex = len(factor.indices)
-            index_exprs.append(indices[:nindex])
-            indices = indices[nindex:]
-        index_exprs = tuple(index_exprs[i] for i in index_order)
-        factors = tuple(self.factors[i] for i in index_order)
-        strides = numpy.cumprod((1, ) + tuple(f.size for f in reversed(factors)))
+        strides = numpy.cumprod((1, ) + tuple(f.size for f in reversed(self.factors)))
         strides = tuple(reversed(strides[:-1]))
 
         expr = 0
-        for stride, index_expr, factor in zip(strides, index_exprs, self.factors):
+        for stride, factor in zip(strides, self.factors):
+            nindex = len(factor.indices)
+            index_expr = index_exprs[:nindex]
+            index_exprs = index_exprs[nindex:]
             expr = expr + factor.linear_index_map(index_expr, None)*stride
         return expr
 
@@ -243,20 +215,55 @@ class TensorProductEntitySet(EntitySet):
 
 class MeshTopology(metaclass=abc.ABCMeta):
     """Object representing some structured mesh pattern."""
+    def __init__(self, base, dimension):
+        self.base = base
+        self.dimension = dimension
 
-    @property
     @abc.abstractmethod
-    def embedding_dimension(self):
+    def entity_variants(self, *, codimension=None, dimension=None):
         pass
 
     @abc.abstractmethod
-    def entity_variants(self, codim=None):
-        pass
+    def cone(self, multiindex):
+        """Return the codimension + 1 neighbours of a multiindex.
+
+        :arg multiindex: a :class:`MultiIndex` object.
+        :returns: A (possibly empty) tuple of multiindices
+        """
 
     @abc.abstractmethod
-    def subentity_map(self, entity_set, subentity_set, multiindex, subentity_multiindex):
-        pass
+    def support(self, multiindex):
+        """Return the codimension - 1 neighbours of a multiindex.
 
-    @abc.abstractmethod
-    def dual_subentity_map(self, subentity_set, entity_set, multiindex):
-        pass
+        :arg multiindex: a :class:`MultiIndex` object.
+        :returns: A (possibly empty) tuple of (support_multiindex,
+            local_subentity_index) pairs. Where local_subentity_index
+            is the local index in the support entity of the multiindex entity.
+        """
+
+    def index_relation(self, multiindex, entity_set):
+        """Compute multiindices for all entities in the target which
+        are reachable from the source point.
+
+        :arg multiindex: A :class:`MultiIndex` object.
+        :arg target: An entity set.
+        :returns: A (possibly empty) tuple of multiindices describing
+            points in the target set.
+        """
+        _, source = multiindex
+        if source.codimension == target.codimension:
+            return (multiindex, )
+        elif source.codimension > target.codimension:
+            indices, _ = zip(*self.support(multiindex))
+        else:
+            indices = self.cone(multiindex)
+        seen = set()
+        indices = indices + tuple(itertools.chain(*(self.index_relation(mi, target)
+                                                    for mi in indices)))
+        filtered_indices = []
+        for mi in indices:
+            if mi not in seen:
+                filtered_indices.append(mi)
+                seen.add(mi)
+        return tuple(filtered_indices)
+        
