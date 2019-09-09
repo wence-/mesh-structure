@@ -34,6 +34,7 @@
 - property `dimension`: topological dimension
 - function `entity_sets(dim/codim)` returns a list of entity sets with tags
   - tags describe different variants of entities with same reference element
+	- **Note:** should these tags already be part of the entity sets?
   - e.g. one tag for vertical and one for horizontal edges of a 2d blockstructured quadrilateral
 - function `cone(multiindex)` returns a list of multiindices with `codim + 1`
   - e.g. in case of a blockstructured quadrilateral grid
