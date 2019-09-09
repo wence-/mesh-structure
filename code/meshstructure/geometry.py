@@ -1,16 +1,13 @@
 import abc
-import operator
-from functools import reduce
 
 import ufl
 
-from .hypercube import Tag, HypercubeRefinement
 from .utils import lazyattr
 
 __all__ = ("MeshGeometry", )
 
 
-class MeshGeometry(metaclass=abc.ABCMeta, ufl.Mesh):
+class MeshGeometry(ufl.Mesh, metaclass=abc.ABCMeta):
 
     def __init__(self, topology, element):
         """A representation of """
@@ -30,11 +27,11 @@ class MeshGeometry(metaclass=abc.ABCMeta, ufl.Mesh):
         return self.topology.dimension
 
     @abc.abstractmethod
-    def geometry_dofs(self, multiindex):
+    def geometry_dofs(self, point):
         """An expression for the coordinate dofs in the closure
-    of the provided entity.
+    of the provided point.
 
-        :arg multiindex: The entity to provide dofs for.
+        :arg point: The entity to provide dofs for.
         :returns: An expression of shape (num_basis_functions, geometric_dimension)
         """
         pass

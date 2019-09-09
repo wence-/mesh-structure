@@ -9,11 +9,12 @@ import numpy
 from pymbolic import primitives as pym
 from pymbolic.mapper.evaluator import evaluate
 
-from .symbolics import Index, MultiIndex
+from .symbolics import Index
 from .utils import lazyattr
 
 
-__all__ = ("PointEntitySet", "IntervalEntitySet", "TriangleEntitySet", "TetrahedronEntitySet",
+__all__ = ("UnstructuredEntitySet", "IntervalEntitySet",
+           "TriangleEntitySet", "TetrahedronEntitySet",
            "TensorProductEntitySet")
 
 
@@ -80,7 +81,7 @@ class EntitySet(metaclass=abc.ABCMeta):
 
         @translate.register(pym.Sum)
         def translate_sum(expr, v):
-            return operator.add(*(translate(c, v) for c in expr.children))
+            return reduce(operator.add, (translate(c, v) for c in expr.children))
 
         @translate.register(pym.Variable)
         def translate_variable(expr, v):
@@ -115,6 +116,16 @@ class EntitySet(metaclass=abc.ABCMeta):
         return "{}({})".format(type(self).__name__, self.isl_set)
 
     __repr__ = __str__
+
+
+class UnstructuredEntitySet(EntitySet):
+    def __init__(self, size, dimension, codimension, variant_tag=None):
+        indices = (Index(0, size), )
+        super().__init__(indices, (), dimension, codimension, variant_tag=variant_tag)
+
+    def linear_index_map(self, index_exprs):
+        index, = index_exprs
+        return index
 
 
 def triangular_linear_index_map(i, j, n):
@@ -214,35 +225,44 @@ class TensorProductEntitySet(EntitySet):
 
 
 class MeshTopology(metaclass=abc.ABCMeta):
-    """Object representing some structured mesh pattern."""
-    def __init__(self, base, dimension):
-        self.base = base
+    """Object representing some a mesh topology."""
+    def __init__(self, dimension):
         self.dimension = dimension
 
+    @property
     @abc.abstractmethod
-    def entity_variants(self, *, codimension=None, dimension=None):
-        pass
+    def entities(self):
+        """A dict mapping codimension to tuples of entity sets of given codimension"""
+
+    def entity_variants(self, *, codimension=None):
+        """Return a tuple of entity sets of given codimension, separated by variant.
+
+        :arg codimension: The codimension to select, or None for all entity sets."""
+        if codimension is None:
+            return tuple(itertools.chain.from_iterable(self.entities.values()))
+        else:
+            return self.entities.get(codimension, ())
 
     @abc.abstractmethod
-    def cone(self, multiindex):
-        """Return the codimension + 1 neighbours of a multiindex.
+    def cone(self, point):
+        """Return the codimension + 1 neighbours of a point.
 
-        :arg multiindex: a :class:`MultiIndex` object.
-        :returns: A (possibly empty) tuple of multiindices
+        :arg point: a :class:`Point` object.
+        :returns: A (possibly empty) tuple of points
         """
 
     @abc.abstractmethod
-    def support(self, multiindex):
-        """Return the codimension - 1 neighbours of a multiindex.
+    def support(self, point):
+        """Return the codimension - 1 neighbours of a point.
 
-        :arg multiindex: a :class:`MultiIndex` object.
-        :returns: A (possibly empty) tuple of (support_multiindex,
+        :arg point: a :class:`Point` object.
+        :returns: A (possibly empty) tuple of (support_point,
             local_subentity_index) pairs. Where local_subentity_index
-            is the local index in the support entity of the multiindex entity.
+            is the local index in the support entity of the point.
         """
 
-    def index_relation(self, multiindex, entity_set):
-        """Compute multiindices for all entities in the target which
+    def index_relation(self, point, target):
+        """Compute points for all entities in the target which
         are reachable from the source point.
 
         :arg multiindex: A :class:`MultiIndex` object.
@@ -250,20 +270,34 @@ class MeshTopology(metaclass=abc.ABCMeta):
         :returns: A (possibly empty) tuple of multiindices describing
             points in the target set.
         """
-        _, source = multiindex
+        _, source = point
         if source.codimension == target.codimension:
-            return (multiindex, )
+            return (point, )
         elif source.codimension > target.codimension:
-            indices, _ = zip(*self.support(multiindex))
+            points, _ = zip(*self.support(point))
         else:
-            indices = self.cone(multiindex)
+            points = self.cone(point)
         seen = set()
-        indices = indices + tuple(itertools.chain(*(self.index_relation(mi, target)
-                                                    for mi in indices)))
-        filtered_indices = []
-        for mi in indices:
-            if mi not in seen:
-                filtered_indices.append(mi)
-                seen.add(mi)
-        return tuple(filtered_indices)
+        points = points + tuple(itertools.chain(*(self.index_relation(p, target)
+                                                  for p in points)))
+        filtered_points = []
+        for o in points:
+            if p not in seen:
+                filtered_points.append(p)
+                seen.add(p)
+        return tuple(filtered_points)
         
+
+class UnstructuredMeshTopology(MeshTopology):
+    """An unstructured topology"""
+    pass
+
+
+class StructuredMeshTopology(MeshTopology):
+    """A structured topology
+
+    :arg base: The base topology being "refined".
+    :arg dimension: The topological dimension."""
+    def __init__(self, base, dimension):
+        super().__init__(dimension)
+        self.base = base
