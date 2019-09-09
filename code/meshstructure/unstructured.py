@@ -10,6 +10,8 @@ from .symbolics import Point
 from .topology import UnstructuredEntitySet, UnstructuredMeshTopology
 from .utils import lazyattr
 
+__all__ = ("FIATSimplex", "FIATHyperCube")
+
 
 def binomial(n, k):
     return int(reduce(operator.mul, ((n + 1 - i)/i for i in range(1, k+1)), 1))
@@ -17,13 +19,14 @@ def binomial(n, k):
 
 class UnstructuredSimplex(UnstructuredMeshTopology):
     def __init__(self, dimension):
-        super().__init__(dimension)
-        self.cell = ufl.cell.simplex(dimension)
+        super().__init__(ufl.cell.simplex(dimension))
 
     @lazyattr
     def entities(self):
         dim = self.dimension
-        return dict((codim, UnstructuredEntitySet(binomial(dim+1, codim), dim, codim))
+        return dict((codim, (UnstructuredEntitySet(binomial(dim+1, codim),
+                                                   cell=ufl.cell.simplex(dim-codim),
+                                                   codimension=codim), ))
                     for codim in range(dim+1))
 
     def cone(self, point):
@@ -35,14 +38,15 @@ class UnstructuredSimplex(UnstructuredMeshTopology):
 
 class UnstructuredHyperCube(UnstructuredMeshTopology):
     def __init__(self, dimension):
-        super().__init__(dimension)
-        self.cell = ufl.cell.hypercube(dimension)
+        super().__init__(ufl.cell.hypercube(dimension))
 
     @lazyattr
     def entities(self):
         dim = self.dimension
         nent = lambda d: 2**(dim - d)*binomial(dim, d)
-        return dict((codim, UnstructuredEntitySet(nent(dim - codim), dim, codim))
+        return dict((codim, (UnstructuredEntitySet(nent(dim - codim),
+                                                   cell=ufl.cell.hypercube(dim-codim),
+                                                   codimension=codim), ))
                     for codim in range(dim+1))
 
     def cone(self, point):
@@ -54,10 +58,10 @@ class UnstructuredHyperCube(UnstructuredMeshTopology):
 
 class FIATCell(metaclass=abc.ABCMeta):
 
-    @property
-    @abc.abstractmethod
+    @lazyattr
     def fiat_cell(self):
         """The FIAT reference cell."""
+        return FIAT.ufc_cell(self.cell)
 
     @lazyattr
     def cones(self):
@@ -94,35 +98,54 @@ class FIATCell(metaclass=abc.ABCMeta):
     def cone(self, point):
         indices, eset = point
         index, = indices
+        assert eset in self.valid_entities
         assert isinstance(index, numbers.Integral)
         assert index < eset.size
         codim = eset.codimension
-        target = self.entities[codim + 1]
+        target, = self.entities.get(codim + 1, [None])
+        if target is None:
+            return ()
         return tuple(Point((c,), target) for c in self.cones[codim][index])
 
     def support(self, point):
         indices, eset = point
         index, = indices
+        assert eset in self.valid_entities
         assert isinstance(index, numbers.Integral)
         assert index < eset.size
         codim = eset.codimension
-        target = self.entities[codim - 1]
+        target, = self.entities.get(codim - 1, [None])
+        if target is None:
+            return ()
         # FIXME: Also return local entity
-        return tuple(Point((s,), target) for s in self.supports[codim][index])
+        return tuple((Point((s,), target), ()) for s in self.supports[codim][index])
 
 
 class FIATSimplex(FIATCell, UnstructuredSimplex):
+    """A FIAT simplex cell"""
 
-    @lazyattr
-    def fiat_cell(self):
-        return FIAT.ufc_simplex(self.dimension)
+    def closure(self, point):
+        # FIAT/Firedrake order is vertices, edges, faces, cell
+        # Generic implementation
+        closure = super().closure(point)
+
+        def key(p):
+            (i, ), eset = p
+            return eset.dimension, i
+
+        return tuple(sorted(closure, key=key))
 
 
 class FIATHyperCube(FIATCell, UnstructuredHyperCube):
+    """A FIAT hypercube cell"""
+    # I think this can go in the FIATCell superclass?
+    def closure(self, point):
+        # FIAT/Firedrake order is vertices, edges, faces, cell
+        # Generic implementation
+        closure = super().closure(point)
 
-    @lazyattr
-    def fiat_cell(self):
-        return {0: FIAT.reference_element.Point(),
-                1: FIAT.reference_element.UFCInterval(),
-                2: FIAT.reference_element.UFCQuadrilateral(),
-                3: FIAT.reference_element.UFCHexahedron()}[self.dimension]
+        def key(p):
+            (i, ), eset = p
+            return eset.dimension, i
+
+        return tuple(sorted(closure, key=key))

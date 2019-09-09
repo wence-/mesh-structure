@@ -13,6 +13,7 @@ class MeshGeometry(ufl.Mesh, metaclass=abc.ABCMeta):
         """A representation of """
         assert topology.dimension == element.topological_dimension()
         assert isinstance(element, ufl.VectorElement)
+        assert element.cell() == topology.cell()
         self.topology = topology
         self.element = element
         ufl.Mesh.__init__(self, element)

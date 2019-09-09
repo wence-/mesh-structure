@@ -2,11 +2,13 @@ import itertools
 from enum import Enum
 
 import numpy
+import ufl
 
 from .symbolics import Point
-from .topology import IntervalEntitySet, StructuredMeshTopology, TensorProductEntitySet
+from .topology import (IntervalEntitySet, StructuredMeshTopology,
+                       TensorProductEntitySet)
+from .unstructured import UnstructuredHyperCube
 from .utils import lazyattr
-
 
 __all__ = ("HyperCubeRefinement", )
 
@@ -18,22 +20,24 @@ class Tag(Enum):
 
 class HyperCubeRefinement(StructuredMeshTopology):
 
-    """Representation of structured refinement of a hypercube.
-
-    :arg cells_per_dimension: Number of cells in each direction."""
     def __init__(self, base, *cells_per_dimension):
-        # FIXME: Base is ignored.
-        super().__init__(base, base.dimension)
+        """Representation of structured refinement of a hypercube.
+
+        :arg base: The base topology to refine.
+        :arg cells_per_dimension: Number of cells in each direction."""
+        # FIXME: Base is ignored everywhere else.
+        assert isinstance(base, UnstructuredHyperCube)
+        super().__init__(base, ufl.cell.hypercube(base.dimension))
         assert len(cells_per_dimension) == self.dimension
         self.cells_per_dimension = cells_per_dimension
 
     @lazyattr
     def entities(self):
         entities = {}
-        cells = tuple(IntervalEntitySet(n, codimension=0, variant_tag=Tag.CELL)
-                      for n in cells_per_dimension)
-        vertices = tuple(IntervalEntitySet(n+1, codimension=1, variant_tag=Tag.VERTEX)
-                         for n in cells_per_dimension)
+        cells = tuple(IntervalEntitySet(n, ufl.interval, codimension=0, variant_tag=Tag.CELL)
+                      for n in self.cells_per_dimension)
+        vertices = tuple(IntervalEntitySet(n+1, ufl.vertex, codimension=1, variant_tag=Tag.VERTEX)
+                         for n in self.cells_per_dimension)
         for codim in range(self.dimension+1):
             ents = []
             # Sets of entities of given codim are created by selecting
@@ -56,7 +60,7 @@ class HyperCubeRefinement(StructuredMeshTopology):
         :arg point: The point in the set.
         :returns: A tuple of points.
         """
-        indices, eset = multiindex
+        indices, eset = point
         assert len(indices) == len(eset.factors)
         codim = eset.codimension + 1
         targets = self.entity_variants(codimension=codim)
@@ -75,6 +79,7 @@ class HyperCubeRefinement(StructuredMeshTopology):
         :arg point: The point in the set.
         :returns: A tuple of points. FIXME: not correct.
         """
+        indices, eset = point
         assert len(indices) == len(eset.factors)
         codim = eset.codimension - 1
         targets = self.entity_variants(codimension=codim)

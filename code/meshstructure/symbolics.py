@@ -5,6 +5,8 @@ from pymbolic import primitives as pym
 
 from .utils import lazyattr
 
+__all__ = ("Index", "Point")
+
 
 class Index(pym.Variable):
     count = itertools.count()

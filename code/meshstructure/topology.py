@@ -6,12 +6,12 @@ from functools import reduce, singledispatch
 
 import islpy as isl
 import numpy
+import ufl
 from pymbolic import primitives as pym
 from pymbolic.mapper.evaluator import evaluate
 
 from .symbolics import Index
 from .utils import lazyattr
-
 
 __all__ = ("UnstructuredEntitySet", "IntervalEntitySet",
            "TriangleEntitySet", "TetrahedronEntitySet",
@@ -24,15 +24,19 @@ class EntitySet(metaclass=abc.ABCMeta):
     :arg indices: :class:`Index` objects encoding points in the set.
     :arg constraints: constraints on the indices (expressions), must
         be expressible in Presburger arithmetic.
-    :arg dimension: The dimension of the entities this entity set represents.
+    :arg cell: The type of cells this set contains, a UFL cell.
     :arg codimension: The codimension of the entities this entity set represents.
     :arg variant_tag: Arbitrary data used to distinguish this set."""
-    def __init__(self, indices, constraints, dimension, codimension, variant_tag=None):
+    def __init__(self, indices, constraints, *, cell=None, codimension=None, variant_tag=None):
         self.indices = tuple(indices)
         self.constraints = tuple(constraints)
         self.variant_tag = variant_tag
-        self.dimension = dimension
+        self.cell = cell
         self.codimension = codimension
+
+    @lazyattr
+    def dimension(self):
+        return self.cell.topological_dimension()
 
     @lazyattr
     def index_extents(self):
@@ -113,15 +117,15 @@ class EntitySet(metaclass=abc.ABCMeta):
         return reduce(operator.and_, exprs)
 
     def __str__(self):
-        return "{}({})".format(type(self).__name__, self.isl_set)
+        return "{}({}, {})".format(type(self).__name__, self.isl_set, self.cell)
 
     __repr__ = __str__
 
 
 class UnstructuredEntitySet(EntitySet):
-    def __init__(self, size, dimension, codimension, variant_tag=None):
+    def __init__(self, size, *, cell, codimension, variant_tag=None):
         indices = (Index(0, size), )
-        super().__init__(indices, (), dimension, codimension, variant_tag=variant_tag)
+        super().__init__(indices, (), cell=cell, codimension=codimension, variant_tag=variant_tag)
 
     def linear_index_map(self, index_exprs):
         index, = index_exprs
@@ -142,7 +146,8 @@ def tetrahedral_linear_index_map(i, j, k, n):
 
 
 class SimplexEntitySet(EntitySet):
-    """An entity set describing some number of simplices.
+    """An entity set describing some number of entities with a simplex
+    constraint on the indexing.
 
     :arg extent: Max extent in each direction.
 
@@ -152,15 +157,16 @@ class SimplexEntitySet(EntitySet):
 
     Where len(indices) == dimension
     """
-    def __init__(self, extent, dimension, codimension, variant_tag=None):
+    def __init__(self, extent, *, cell, codimension, variant_tag=None):
         assert isinstance(extent, numbers.Integral)
         self.extent = extent
+        dimension = cell.topological_dimension()
         indices = tuple(Index(0, extent) for _ in range(dimension))
         if indices:
             constraints = (pym.Comparison(reduce(operator.add, indices), "<", extent), )
         else:
             constraints = ()
-        super().__init__(indices, constraints, dimension, codimension, variant_tag=variant_tag)
+        super().__init__(indices, constraints, cell=cell, codimension=codimension, variant_tag=variant_tag)
 
 
 class IntervalEntitySet(SimplexEntitySet):
@@ -202,8 +208,8 @@ class TensorProductEntitySet(EntitySet):
         assert len(set(i.name for i in indices)) == len(indices), "Must provide unique index names"
         constraints = tuple(itertools.chain(*(f.constraints for f in self.factors)))
         codimension = sum(f.codimension for f in self.factors)
-        dimension = sum(f.dimension for f in self.factors)
-        super().__init__(indices, constraints, dimension, codimension, variant_tag=variant_tag)
+        cell = ufl.TensorProductCell(*(f.cell for f in self.factors))
+        super().__init__(indices, constraints, cell=cell, codimension=codimension, variant_tag=variant_tag)
 
     def linear_index_map(self, index_exprs):
         assert len(index_exprs) == sum(len(f.indices) for f in self.factors)
@@ -225,14 +231,25 @@ class TensorProductEntitySet(EntitySet):
 
 
 class MeshTopology(metaclass=abc.ABCMeta):
-    """Object representing some a mesh topology."""
-    def __init__(self, dimension):
-        self.dimension = dimension
+    def __init__(self, cell):
+        """Object representing some mesh topology.
+
+        :arg cell: The cell type for the mesh, a UFL cell."""
+        assert cell.topological_dimension() == cell.geometric_dimension()
+        self.cell = cell
+
+    @lazyattr
+    def dimension(self):
+        return self.cell.topological_dimension()
 
     @property
     @abc.abstractmethod
     def entities(self):
         """A dict mapping codimension to tuples of entity sets of given codimension"""
+
+    @lazyattr
+    def valid_entities(self):
+        return frozenset(self.entity_variants())
 
     def entity_variants(self, *, codimension=None):
         """Return a tuple of entity sets of given codimension, separated by variant.
@@ -261,11 +278,55 @@ class MeshTopology(metaclass=abc.ABCMeta):
             is the local index in the support entity of the point.
         """
 
+    def closure(self, point):
+        """All points in the closure of the given point.
+
+        :arg point: The point.
+        :returns: A tuple of points in the topological closure of the
+            given point."""
+        seen = set([])
+        fifo = [point]
+        closure = []
+        while fifo:
+            p = fifo.pop()
+            if p in seen:
+                continue
+            closure.append(p)
+            seen.add(p)
+            cone = self.cone(p)
+            for c in cone:
+                fifo.insert(0, c)
+        return tuple(closure)
+
+    def star(self, point):
+        """All points in the star (dual of closure) of the given
+        point.
+
+        :arg point: The point:
+        :returns: A tuple of points in the topological star of the
+            given point."""
+        seen = set([])
+        fifo = [point]
+        star = []
+        while fifo:
+            p = fifo.pop()
+            if p in seen:
+                continue
+            star.append(p)
+            seen.add(p)
+            try:
+                support, _ = zip(*self.support(p))
+            except ValueError:
+                support = ()
+            for s in support:
+                fifo.insert(0, s)
+        return tuple(star)
+
     def index_relation(self, point, target):
         """Compute points for all entities in the target which
         are reachable from the source point.
 
-        :arg multiindex: A :class:`MultiIndex` object.
+        :arg multiindex: A :class:`Point` object.
         :arg target: An entity set.
         :returns: A (possibly empty) tuple of multiindices describing
             points in the target set.
@@ -274,19 +335,22 @@ class MeshTopology(metaclass=abc.ABCMeta):
         if source.codimension == target.codimension:
             return (point, )
         elif source.codimension > target.codimension:
-            points, _ = zip(*self.support(point))
+            try:
+                points, _ = zip(*self.support(point))
+            except ValueError:
+                points = ()
         else:
             points = self.cone(point)
         seen = set()
         points = points + tuple(itertools.chain(*(self.index_relation(p, target)
                                                   for p in points)))
         filtered_points = []
-        for o in points:
+        for p in points:
             if p not in seen:
                 filtered_points.append(p)
                 seen.add(p)
         return tuple(filtered_points)
-        
+
 
 class UnstructuredMeshTopology(MeshTopology):
     """An unstructured topology"""
@@ -297,7 +361,7 @@ class StructuredMeshTopology(MeshTopology):
     """A structured topology
 
     :arg base: The base topology being "refined".
-    :arg dimension: The topological dimension."""
-    def __init__(self, base, dimension):
-        super().__init__(dimension)
+    :arg cell: The cell type of the topology."""
+    def __init__(self, base, cell):
+        super().__init__(cell)
         self.base = base

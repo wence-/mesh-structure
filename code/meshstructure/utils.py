@@ -1,3 +1,6 @@
+__all__ = ("lazyattr", "as_tuple")
+
+
 class lazyattr(object):
     """A read-only attribute that is created on-demand. Like @property
     but only evaluates the body of the function once."""
@@ -11,3 +14,10 @@ class lazyattr(object):
         if obj is None:
             return self
         return obj.__dict__.setdefault(self.__name__, self.fget(obj))
+
+
+def as_tuple(thing):
+    try:
+        return tuple(thing)
+    except TypeError:
+        return (thing, )

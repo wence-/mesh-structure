@@ -1,9 +1,11 @@
 from collections import defaultdict
 from enum import Enum
 
-from .topology import IntervalEntitySet, StructuredMeshTopology, TensorProductEntitySet
-from .utils import lazyattr
+import ufl
 
+from .topology import (IntervalEntitySet, StructuredMeshTopology,
+                       TensorProductEntitySet)
+from .utils import lazyattr
 
 __all__ = ("MeshExtrusion", )
 
@@ -21,7 +23,7 @@ class MeshExtrusion(StructuredMeshTopology):
 
         :arg base: The base topology to be extruded.
         :arg nlevel: The number of levels (cells) in the extruded topology."""
-        super().__init__(base, base.dimension + 1)
+        super().__init__(base, ufl.TensorProductCell(base.cell, ufl.interval))
         self.nlevel = nlevel
 
     @lazyattr
