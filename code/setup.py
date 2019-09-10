@@ -10,7 +10,11 @@ base_dir = os.path.abspath(os.path.dirname(__file__))
 
 setup(name="meshstructure",
       packages=find_packages(),
-      install_requires=[],
+      install_requires=["fenics-fiat",
+                        "fenics-ufl",
+                        "pymbolic",
+                        "islpy",
+                        "numpy"],
       description="Mesh structure for code generation",
       classifiers=[
           "Operating System :: OS Independent",
