@@ -5,8 +5,7 @@ import numpy
 import ufl
 
 from .symbolics import Point
-from .topology import (IntervalEntitySet, StructuredMeshTopology,
-                       TensorProductEntitySet)
+from .topology import (TriangleEntitySet, StructuredMeshTopology)
 from .unstructured import UnstructuredSimplex
 from .utils import lazyattr
 
@@ -32,8 +31,8 @@ class TriangleRefinement(StructuredMeshTopology):
         # FIXME: Base is ignored everywhere else.
         assert isinstance(base, UnstructuredSimplex)
         assert base.dimension == 2
-        super().__init__(base, ufl.cell.hypercube(base.dimension))
-        assert type(cells_per_dimension) is int
+        super().__init__(base, ufl.cell.triangle())
+        assert isinstance(cells_per_dimension, numbers.Integral)
         self.cells_per_dimension = cells_per_dimension
 
     @lazyattr
@@ -41,16 +40,16 @@ class TriangleRefinement(StructuredMeshTopology):
         entities = {}
         # cells
         entities[0] = tuple(
-            TriangularEntitySet(self.cells_per_dimension,   ufl.triangle, codimension=0, variant_tag=Tag.CELL_LL),
-            TriangularEntitySet(self.cells_per_dimension-1, ufl.triangle, codimension=0, variant_tag=Tag.CELL_UR))
+            TriangleEntitySet(self.cells_per_dimension,   ufl.triangle, codimension=0, variant_tag=Tag.CELL_LL),
+            TriangleEntitySet(self.cells_per_dimension-1, ufl.triangle, codimension=0, variant_tag=Tag.CELL_UR))
         # faces
         entities[1] = tuple(
-            TriangularEntitySet(self.cells_per_dimension,   ufl.triangle, codimension=1, variant_tag=Tag.EDGE_X),
-            TriangularEntitySet(self.cells_per_dimension,   ufl.triangle, codimension=1, variant_tag=Tag.EDGE_Y),
-            TriangularEntitySet(self.cells_per_dimension,   ufl.triangle, codimension=1, variant_tag=Tag.EDGE_XY))
+            TriangleEntitySet(self.cells_per_dimension,   ufl.interval, codimension=1, variant_tag=Tag.EDGE_X),
+            TriangleEntitySet(self.cells_per_dimension,   ufl.interval, codimension=1, variant_tag=Tag.EDGE_Y),
+            TriangleEntitySet(self.cells_per_dimension,   ufl.interval, codimension=1, variant_tag=Tag.EDGE_XY))
         # vertices
         entities[2] = tuple(
-            TriangularEntitySet(self.cells_per_dimension+1, ufl.triangle, codimension=2, variant_tag=Tag.Tag.VERTEX))
+            TriangleEntitySet(self.cells_per_dimension+1, ufl.vertex,   codimension=2, variant_tag=Tag.VERTEX))
         return entities
 
     def cone(self, point):
