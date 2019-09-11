@@ -55,10 +55,24 @@
 - property `topological_dimension`: dimension of topology
 - property `finite_element`: defines the space of transformations from the reference element into the
   coordinate space
-- function `geometry_dofs(multiindex)` returns a 2d array of shape
+- function `geometry_dofs(multiindex)`: returns a 2d array of shape
   `(num_basis_functions, geometric_dimension)` with the coordinates of the dofs in the
   closure of the subentity described by `multiindex`
   - the closure is defined as the recursive application of `cone(multiindex)`
+  - example blockstructured refinement in 2d: `w_k` corners of macro element,
+	then the coordinates of the dofs for a cell with index `i,j` are
+	`v_l = sum_k w_k phi_k(y_l)` with `y_l = (e_l + (i,j))/N` and `e_l` the
+	corners of the reference element
+- function `spatial_coordinate(multiindex, qp)`: returns the coordinates for a
+  quadrature point given in the local coordinate system of the subentity
+  described by `multiindex`
+  - this can also be computed by using `geometry_dofs` but there are more
+	efficient ways
+  - example blockstructured refinement in 2d: `w_k` corners of macro element,
+	then for a cell `i,j` the global coordinates of the quadrature point are
+	`x = sum_k w_k phi_k((qp + (i,j)) / N)`
+	- computation using `v_l = geometry_dofs(multiindex)`:
+	  `x = sum_l v_l phi_l(qp)` + computation of `v_l`
 
 ## Data Layout
 
