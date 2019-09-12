@@ -48,6 +48,87 @@
   with the same entity set as `target_entity_set` which are connected to `multiindex`
   - this has a generic implementation recursivly applying `cone` or `support`
 
+### Generating cone and support relations
+
+The points that are returned by the cone and support relations must be
+consistently ordered with some concrete _reference element_ (for
+example provided by FIAT, or DUNE).
+
+The proposal is to do this like so:
+
+Each entity set is augmented with a `reference_element` object which
+provides integer offsets from a "zero" multiindex and the cone
+(or supports). Applying the operation to a general multiindex then
+consists of applying these integer offsets to the multiindex. We
+additionally require a rule that maps a given multiindex on this
+reference element to an entity number on the external package's
+reference element. For example, a flattening rule for multiindices
+into a single integer on simplices.
+
+#### Generic rules for mapping from multiindices to a flat index
+
+On hypercubes, we number multiindices lexicographically on the
+`reference_element`, this gives us a consistent way of mapping into
+the DUNE/FIAT element.
+
+On simplices, we construct refinement patterns by performing Kuhn
+refinement of a hypercube and discarding those parts of the hypercube
+which are outside the simplex sum(i, j, k, ...) >= N.
+
+To map the different types of simplex to a single oriented simplex
+(transformation is different, orientation is easy), we order the
+simplex vertices lexicographically by the hypercube multiindex.
+
+So for example:
+
+```
+(0, 1)----(1, 1)
+  |  \      |
+  |   \     |
+  |    \    |
+  |     \   |
+  |      \  |
+(0, 0)----(0, 1)
+```
+
+Numbers the "left" triangle
+```
+  2
+  |\
+  | \
+  |  \
+  |   \
+  |    \
+  0-----1
+```
+
+And the "right" triangle
+```
+  1-----2
+   \    |
+    \   |
+     \  |
+      \ |
+       \|
+        0
+```
+
+Orienting edges from low to high results in consistently oriented
+edges.
+
+The same idea works for tets (and higher-dimensional simplices too,
+but I can't draw them).
+
+If, conversely, we want to keep the transformations the same (i.e. the
+element tensor is a permutation), we split the triangles into two
+types "left" and "right". "left" triangles are numbered
+lexicographically in increasing multiindex order, "right" triangles
+are numbered in reverse lexicographic order.
+
+The same approach again works for the different classes of tets that
+are produced in Kuhn refinement: they pair up and one is numbered
+forwards, the other one backwards.
+
 ## Geometry
 
 - property `topology`: underlying topology
