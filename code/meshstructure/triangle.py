@@ -34,24 +34,42 @@ class TriangleRefinement(StructuredMeshTopology):
         super().__init__(base, ufl.cell.triangle())
         assert isinstance(cells_per_dimension, numbers.Integral)
         self.cells_per_dimension = cells_per_dimension
-
-    @lazyattr
-    def entities(self):
-        entities = {}
+        ########################
+        ### generate entity sets
+        self.entities = {}
         # cells
-        entities[0] = tuple(
+        self.entities[0] = tuple(
             TriangleEntitySet(self.cells_per_dimension,   ufl.triangle, codimension=0, variant_tag=Tag.CELL_LL),
             TriangleEntitySet(self.cells_per_dimension-1, ufl.triangle, codimension=0, variant_tag=Tag.CELL_UR))
         # faces
-        entities[1] = tuple(
+        self.entities[1] = tuple(
             TriangleEntitySet(self.cells_per_dimension,   ufl.interval, codimension=1, variant_tag=Tag.EDGE_X),
             TriangleEntitySet(self.cells_per_dimension,   ufl.interval, codimension=1, variant_tag=Tag.EDGE_Y),
             TriangleEntitySet(self.cells_per_dimension,   ufl.interval, codimension=1, variant_tag=Tag.EDGE_XY))
         # vertices
-        entities[2] = tuple(
+        self.entities[2] = tuple(
             TriangleEntitySet(self.cells_per_dimension+1, ufl.vertex,   codimension=2, variant_tag=Tag.VERTEX))
-        return entities
-
+        #######################
+        ### generate cone rules
+        self.cones = {}
+        # cell -> edge
+        self.cones[self.entities[0][0]] = [([0,0],self.entities[1][2]), ([0,0],self.entities[1][0]), ([0,0],self.entities[1][1])] # ll
+        self.cones[self.entities[0][1]] = [([0,1],self.entities[1][0]), ([1,0],self.entities[1][1]), ([0,0],self.entities[1][2])] # ur
+        # edge -> vertex
+        self.cones[self.entities[1][0]] = [([0,0],self.entities[2][0]), ([1,0],self.entities[2][0])] # x
+        self.cones[self.entities[1][1]] = [([0,0],self.entities[2][0]), ([0,1],self.entities[2][0])] # y
+        self.cones[self.entities[1][2]] = [([1,0],self.entities[2][0]), ([0,1],self.entities[2][0])] # xy
+        ##########################
+        ### generate support rules
+        # edge -> cell
+        self.supps[self.entities[1][0]] = [([-1,0],self.entities[0][0]), ([0,0],self.entities[0][1])]
+        self.supps[self.entities[1][1]] = [([0,-1],self.entities[0][0]), ([0,0],self.entities[0][1])]
+        self.supps[self.entities[1][2]] = [([0,0],self.entities[0][0]), ([0,0],self.entities[0][1])]
+        # vertex -> edge
+        self.supps[self.entities[2][0]] = [([-1,0],self.entities[1][0]), ([0,0],self.entities[1][0]),  # y
+                                           ([0,-1],self.entities[1][1]), ([0,0],self.entities[1][1]),  # x
+                                           ([-1,0],self.entities[1][2]), ([0,-1],self.entities[1][2])] # xy
+        
     def cone(self, point):
         """Given indices into an entity set, produce the index
         expressions for the cone of the entity, that is, the entities
@@ -60,17 +78,8 @@ class TriangleRefinement(StructuredMeshTopology):
         :arg point: The point in the set.
         :returns: A tuple of points.
         """
-        raise NotImplementedError
         indices, eset = point
-        assert len(indices) == len(eset.factors)
-        codim = eset.codimension + 1
-        targets = self.entity_variants(codimension=codim)
-        exprs = []
-        for target in targets:
-            expr = zip(*((index, index if parent.variant_tag == child.variant_tag else index + 1)
-                         for index, parent, child in zip(indices, eset.factors, target.factors)))
-            exprs.extend(Point(e, target) for e in expr)
-        return tuple(exprs)
+        return tuple(indices + shift for shift in cones[eset])
 
     def support(self, point):
         """Given indices into an entity set, produce index expression
@@ -82,13 +91,4 @@ class TriangleRefinement(StructuredMeshTopology):
         """
         raise NotImplementedError
         indices, eset = point
-        assert len(indices) == len(eset.factors)
-        codim = eset.codimension - 1
-        targets = self.entity_variants(codimension=codim)
-        exprs = []
-        for target in targets:
-            expr = zip(*((index, index if parent.variant_tag == child.variant_tag else index - 1)
-                         for index, parent, child in zip(indices, eset.factors, target.factors)))
-            exprs.extend(Point(e, target) for e in expr)
-        raise NotImplementedError("Need to also determine local subentity")
-        return tuple(exprs)
+        return tuple(indices + shift for shift in supps[eset])
