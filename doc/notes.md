@@ -154,6 +154,8 @@ forwards, the other one backwards.
 	`x = sum_k w_k phi_k((qp + (i,j)) / N)`
 	- computation using `v_l = geometry_dofs(multiindex)`:
 	  `x = sum_l v_l phi_l(qp)` + computation of `v_l`
+	- with sympy both computations are (nearly) identical if we can evaluate
+	  basis functions and gradients at compile time
 
 ## Data Layout
 
