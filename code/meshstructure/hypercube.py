@@ -34,9 +34,9 @@ class HyperCubeRefinement(StructuredMeshTopology):
     @lazyattr
     def entities(self):
         entities = {}
-        cells = tuple(IntervalEntitySet(n, ufl.interval, codimension=0, variant_tag=Tag.CELL)
+        cells = tuple(IntervalEntitySet(n, cell=ufl.interval, codimension=0, variant_tag=Tag.CELL)
                       for n in self.cells_per_dimension)
-        vertices = tuple(IntervalEntitySet(n+1, ufl.vertex, codimension=1, variant_tag=Tag.VERTEX)
+        vertices = tuple(IntervalEntitySet(n+1, cell=ufl.interval, codimension=1, variant_tag=Tag.VERTEX)
                          for n in self.cells_per_dimension)
         for codim in range(self.dimension+1):
             ents = []
