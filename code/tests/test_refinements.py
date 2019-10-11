@@ -14,7 +14,7 @@ def test_hypercube_size(dim):
     vertex_set, = h.entity_variants(codimension=dim)
     assert vertex_set.size == 6**dim
 
-    for codim in range(1,dim):
+    for codim in range(1, dim):
         sets = h.entity_variants(codimension=codim)
         set_sizes = [set.size for set in sets]
         assert all(set_sizes[0] == s for s in set_sizes)
