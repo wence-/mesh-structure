@@ -28,8 +28,8 @@ class MeshExtrusion(StructuredMeshTopology):
 
     @lazyattr
     def entities(self):
-        cells = IntervalEntitySet(self.nlevel, codimension=0, variant_tag=Tag.CELL)
-        vertices = IntervalEntitySet(self.nlevel+1, codimension=1, variant_tag=Tag.VERTEX)
+        cells = IntervalEntitySet(self.nlevel, cell=ufl.interval, codimension=0, variant_tag=Tag.CELL)
+        vertices = IntervalEntitySet(self.nlevel+1, cell=ufl.interval, codimension=1, variant_tag=Tag.VERTEX)
         entities = defaultdict(list)
         for (codim, esets) in self.base.entities.items():
             entities[codim].extend(TensorProductEntitySet(eset, cells,
