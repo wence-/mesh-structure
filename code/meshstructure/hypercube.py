@@ -34,10 +34,6 @@ class HyperCubeRefinement(StructuredMeshTopology):
     @lazyattr
     def entities(self):
         entities = {}
-        cells = tuple(IntervalEntitySet(n, cell=ufl.interval, codimension=0, variant_tag=Tag.CELL)
-                      for n in self.cells_per_dimension)
-        vertices = tuple(IntervalEntitySet(n+1, cell=ufl.interval, codimension=1, variant_tag=Tag.VERTEX)
-                         for n in self.cells_per_dimension)
         for codim in range(self.dimension+1):
             ents = []
             # Sets of entities of given codim are created by selecting
@@ -45,6 +41,10 @@ class HyperCubeRefinement(StructuredMeshTopology):
             #
             # This is a multiset permutation of [0] * (dimension-codim) + [1] * codim
             for vtx in itertools.combinations(range(self.dimension), codim):
+                cells = tuple(IntervalEntitySet(n, cell=ufl.interval, codimension=0, variant_tag=Tag.CELL)
+                              for n in self.cells_per_dimension)
+                vertices = tuple(IntervalEntitySet(n + 1, cell=ufl.interval, codimension=1, variant_tag=Tag.VERTEX)
+                                 for n in self.cells_per_dimension)
                 idx = list(vtx)
                 factors = numpy.asarray(cells)
                 factors[idx] = numpy.asarray(vertices)[idx]
