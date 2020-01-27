@@ -224,7 +224,19 @@ class TensorProductEntitySet(EntitySet):
     :arg factors: index sets for the directions in the tensor product.
     :arg variant_tag: Arbitrary distinguishing tag."""
     def __init__(self, *factors, variant_tag=None):
-        self.factors = tuple(factors)
+        self.factors = tuple()
+
+        def flatten_factor(factor):
+            if isinstance(factor, TensorProductEntitySet):
+                for f in factor.factors:
+                    yield from flatten_factor(f)
+            else:
+                yield factor
+
+        for factor in factors:
+            for f_ in flatten_factor(factor):
+                self.factors += (f_,)
+
         if any(isinstance(f, TensorProductEntitySet) for f in self.factors):
             raise ValueError("Can't deal with nested tensor products sorry")
         indices = tuple(itertools.chain(*(f.indices for f in self.factors)))
