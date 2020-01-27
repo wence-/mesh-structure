@@ -169,7 +169,21 @@ class SimplexEntitySet(EntitySet):
         super().__init__(indices, constraints, cell=cell, codimension=codimension, variant_tag=variant_tag)
 
 
-class IntervalEntitySet(SimplexEntitySet):
+class IntervalEntitySet(EntitySet):
+    def __init__(self, extent_or_index, *, cell, codimension, variant_tag=None):
+        assert isinstance(extent_or_index, (numbers.Integral, Index))
+        if isinstance(extent_or_index, numbers.Integral):
+            self.extent = extent_or_index
+            indices = Index(0, extent_or_index)
+        else:
+            self.extent = extent_or_index.extent
+            indices = extent_or_index
+        if indices:
+            constraints = (pym.Comparison(indices, "<", indices.hi),
+                           pym.Comparison(indices, ">=", indices.lo))
+        else:
+            constraints = ()
+        super().__init__((indices,), constraints, cell=cell, codimension=codimension, variant_tag=variant_tag)
 
     """A representation of some number of intervals."""
 
