@@ -245,7 +245,7 @@ class TensorProductEntitySet(EntitySet):
             nindex = len(factor.indices)
             index_expr = index_exprs[:nindex]
             index_exprs = index_exprs[nindex:]
-            expr = expr + factor.linear_index_map(index_expr, None)*stride
+            expr = expr + factor.linear_index_map(index_expr)*stride
         return expr
 
     def __str__(self):
