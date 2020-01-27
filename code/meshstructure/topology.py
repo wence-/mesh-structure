@@ -191,6 +191,15 @@ class IntervalEntitySet(EntitySet):
         i, = index_exprs
         return i
 
+    def boundaries(self):
+        lo = self.indices[0].lo
+        hi = self.indices[0].hi
+
+        return (IntervalEntitySet(Index(lo, lo + 1), cell=self.cell, codimension=self.codimension,
+                                  variant_tag=self.variant_tag),
+                IntervalEntitySet(Index(hi - 1, hi), cell=self.cell, codimension=self.codimension,
+                                  variant_tag=self.variant_tag),)
+
 
 class TriangleEntitySet(SimplexEntitySet):
     """A representation of entities with a "triangle" constraint."""
@@ -242,6 +251,17 @@ class TensorProductEntitySet(EntitySet):
     def __str__(self):
         factors = ", ".join(str(f) for f in self.factors)
         return "TensorProductEntitySet({}: {})".format(factors, self.isl_set)
+
+    def boundaries(self):
+        factors_set = set(self.factors)
+
+        boundaries = tuple()
+        for factor in self.factors:
+            factor_boundaries = factor.boundaries()
+            for boundary in factor_boundaries:
+                boundaries = boundaries + (TensorProductEntitySet(boundary, *(tuple(factors_set - {factor})),
+                                                                  variant_tag=self.variant_tag),)
+        return boundaries
 
 
 class MeshTopology(metaclass=abc.ABCMeta):
