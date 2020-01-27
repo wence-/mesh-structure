@@ -93,5 +93,4 @@ class HyperCubeRefinement(StructuredMeshTopology):
                 expr = zip(*((index, index if parent.variant_tag == child.variant_tag else index - 1)
                              for index, parent, child in zip(indices, eset.factors, target.factors)))
                 exprs.extend(Point(e, target) for e in expr)
-        raise NotImplementedError("Need to also determine local subentity")
-        return tuple(exprs)
+        return zip(exprs, [None] * len(exprs))
