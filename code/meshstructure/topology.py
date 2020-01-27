@@ -376,8 +376,8 @@ class MeshTopology(metaclass=abc.ABCMeta):
         else:
             points = self.cone(point)
         seen = set()
-        points = points + tuple(itertools.chain(*(self.index_relation(p, target)
-                                                  for p in points)))
+        points = tuple(itertools.chain(*(self.index_relation(p, target)
+                                         for p in points)))
         filtered_points = []
         for p in points:
             if p not in seen:
