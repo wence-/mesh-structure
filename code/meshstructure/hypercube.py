@@ -31,6 +31,9 @@ class HyperCubeRefinement(StructuredMeshTopology):
         assert len(cells_per_dimension) == self.dimension
         self.cells_per_dimension = cells_per_dimension
 
+    def _is_topologically_connected(self, cset, pset):
+        return pset.isl_set <= cset.isl_set
+
     @lazyattr
     def entities(self):
         entities = {}
@@ -66,9 +69,10 @@ class HyperCubeRefinement(StructuredMeshTopology):
         targets = self.entity_variants(codimension=codim)
         exprs = []
         for target in targets:
-            expr = zip(*((index, index if parent.variant_tag == child.variant_tag else index + 1)
-                         for index, parent, child in zip(indices, eset.factors, target.factors)))
-            exprs.extend(Point(e, target) for e in expr)
+            if self._is_topologically_connected(target, eset):
+                expr = zip(*((index, index if parent.variant_tag == child.variant_tag else index + 1)
+                             for index, parent, child in zip(indices, eset.factors, target.factors)))
+                exprs.extend(Point(e, target) for e in expr)
         return tuple(exprs)
 
     def support(self, point):
@@ -85,8 +89,9 @@ class HyperCubeRefinement(StructuredMeshTopology):
         targets = self.entity_variants(codimension=codim)
         exprs = []
         for target in targets:
-            expr = zip(*((index, index if parent.variant_tag == child.variant_tag else index - 1)
-                         for index, parent, child in zip(indices, eset.factors, target.factors)))
-            exprs.extend(Point(e, target) for e in expr)
+            if self._is_topologically_connected(eset, target):
+                expr = zip(*((index, index if parent.variant_tag == child.variant_tag else index - 1)
+                             for index, parent, child in zip(indices, eset.factors, target.factors)))
+                exprs.extend(Point(e, target) for e in expr)
         raise NotImplementedError("Need to also determine local subentity")
         return tuple(exprs)
