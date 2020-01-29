@@ -170,6 +170,24 @@ class SimplexEntitySet(EntitySet):
             constraints = ()
         super().__init__(indices, constraints, cell=cell, codimension=codimension, variant_tag=variant_tag)
 
+    def interior(self):
+        return self.__class__(self.extent - 1, cell=self.cell, codimension=self.codimension,
+                              variant_tag=self.variant_tag, start=self.start + 1)
+
+    def boundaries(self):
+        boundaries = tuple()
+        for i in range(len(self.indices)):
+            boundary = self.__class__(self.extent, cell=self.cell, codimension=self.codimension - 1,
+                                      variant_tag=self.variant_tag, start=self.start)  # TODO: what about variant_tag?
+            boundary.constraints += (pym.Comparison(boundary.indices[i], "==", boundary.indices[i].lo),)
+            boundaries += (boundary,)
+        boundary = self.__class__(self.extent, cell=self.cell, codimension=self.codimension - 1,
+                                  variant_tag=self.variant_tag, start=self.start)
+        boundary.constraints += (pym.Comparison(reduce(operator.add, boundary.indices), "==", boundary.extent - 1),)
+        boundaries += (boundary,)
+
+        return boundaries
+
 
 class IntervalEntitySet(SimplexEntitySet):
     """A representation of some number of intervals."""
