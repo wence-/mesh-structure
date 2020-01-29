@@ -276,10 +276,11 @@ class TensorProductEntitySet(EntitySet):
 
         boundaries = tuple()
         for factor in self.factors:
-            factor_boundaries = factor.boundaries()
-            for boundary in factor_boundaries:
-                boundaries = boundaries + (TensorProductEntitySet(boundary, *(tuple(factors_set - {factor})),
-                                                                  variant_tag=self.variant_tag),)
+            if not isinstance(factor, UnstructuredEntitySet):  # Otherwise the added TPES is just the same as self
+                factor_boundaries = factor.boundaries()
+                for boundary in factor_boundaries:
+                    boundaries = boundaries + (TensorProductEntitySet(boundary, *(tuple(factors_set - {factor})),
+                                                                      variant_tag=self.variant_tag),)
         return boundaries
 
 
