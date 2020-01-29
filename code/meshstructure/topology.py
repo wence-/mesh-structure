@@ -153,15 +153,17 @@ class SimplexEntitySet(EntitySet):
 
     Produces an index set with
 
-    0 <= indices < extent, sum(indices) < extent
+    start <= indices < extent and sum(indices) < extent
 
     Where len(indices) == dimension
     """
-    def __init__(self, extent, *, cell, codimension, variant_tag=None):
+    def __init__(self, extent, *, cell, codimension, variant_tag=None, start=0):
         assert isinstance(extent, numbers.Integral)
         self.extent = extent
+        self.start = start
         dimension = cell.topological_dimension()
-        indices = tuple(Index(0, extent) for _ in range(dimension))
+        assert dimension * start < extent
+        indices = tuple(Index(start, extent) for _ in range(dimension))
         if indices:
             constraints = (pym.Comparison(reduce(operator.add, indices), "<", extent), )
         else:
@@ -169,36 +171,12 @@ class SimplexEntitySet(EntitySet):
         super().__init__(indices, constraints, cell=cell, codimension=codimension, variant_tag=variant_tag)
 
 
-class IntervalEntitySet(EntitySet):
-    def __init__(self, extent_or_index, *, cell, codimension, variant_tag=None):
-        assert isinstance(extent_or_index, (numbers.Integral, Index))
-        if isinstance(extent_or_index, numbers.Integral):
-            self.extent = extent_or_index
-            indices = Index(0, extent_or_index)
-        else:
-            self.extent = extent_or_index.extent
-            indices = extent_or_index
-        if indices:
-            constraints = (pym.Comparison(indices, "<", indices.hi),
-                           pym.Comparison(indices, ">=", indices.lo))
-        else:
-            constraints = ()
-        super().__init__((indices,), constraints, cell=cell, codimension=codimension, variant_tag=variant_tag)
-
+class IntervalEntitySet(SimplexEntitySet):
     """A representation of some number of intervals."""
 
     def linear_index_map(self, index_exprs):
         i, = index_exprs
         return i
-
-    def boundaries(self):
-        lo = self.indices[0].lo
-        hi = self.indices[0].hi
-
-        return (IntervalEntitySet(Index(lo, lo + 1), cell=self.cell, codimension=self.codimension,
-                                  variant_tag=self.variant_tag),
-                IntervalEntitySet(Index(hi - 1, hi), cell=self.cell, codimension=self.codimension,
-                                  variant_tag=self.variant_tag),)
 
 
 class TriangleEntitySet(SimplexEntitySet):
