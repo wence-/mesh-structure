@@ -131,10 +131,12 @@ class UnstructuredEntitySet(EntitySet):
         index, = index_exprs
         return index
 
+    @lazyattr
     def interior(self):
         return UnstructuredEntitySet(self.size, cell=self.cell, codimension=self.codimension,
                                      variant_tag=self.variant_tag)
 
+    @lazyattr
     def boundaries(self):
         return (UnstructuredEntitySet(self.size, cell=self.cell, codimension=self.codimension,
                                       variant_tag=self.variant_tag),)
@@ -178,10 +180,12 @@ class SimplexEntitySet(EntitySet):
             constraints = ()
         super().__init__(indices, constraints, cell=cell, codimension=codimension, variant_tag=variant_tag)
 
+    @lazyattr
     def interior(self):
         return self.__class__(self.extent - 1, cell=self.cell, codimension=self.codimension,
                               variant_tag=self.variant_tag, start=self.start + 1)
 
+    @lazyattr
     def boundaries(self):
         boundaries = tuple()
         for i in range(len(self.indices)):
@@ -268,14 +272,16 @@ class TensorProductEntitySet(EntitySet):
         factors = ", ".join(str(f) for f in self.factors)
         return "TensorProductEntitySet({}: {})".format(factors, self.isl_set)
 
+    @lazyattr
     def interior(self):
-        return TensorProductEntitySet(*[f.interior() for f in self.factors], variant_tag=self.variant_tag)
+        return TensorProductEntitySet(*[f.interior for f in self.factors], variant_tag=self.variant_tag)
 
+    @lazyattr
     def boundaries(self):
         boundaries = tuple()
         for factor in self.factors:
             if not isinstance(factor, UnstructuredEntitySet):  # Otherwise the added TPES is just the same as self
-                for boundary in factor.boundaries():
+                for boundary in factor.boundaries:
                     new_factors = tuple(f if f != factor else boundary for f in self.factors)
                     boundaries = boundaries + (TensorProductEntitySet(*new_factors, variant_tag=self.variant_tag),)
         return boundaries
