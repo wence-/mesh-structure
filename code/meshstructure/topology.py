@@ -131,6 +131,14 @@ class UnstructuredEntitySet(EntitySet):
         index, = index_exprs
         return index
 
+    def interior(self):
+        return UnstructuredEntitySet(self.size, cell=self.cell, codimension=self.codimension,
+                                     variant_tag=self.variant_tag)
+
+    def boundaries(self):
+        return (UnstructuredEntitySet(self.size, cell=self.cell, codimension=self.codimension,
+                                      variant_tag=self.variant_tag),)
+
 
 def triangular_linear_index_map(i, j, n):
     """Given (i, j) : 0 <= i, j < n and i + j < n, produce a
