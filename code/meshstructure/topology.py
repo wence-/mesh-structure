@@ -260,6 +260,9 @@ class TensorProductEntitySet(EntitySet):
         factors = ", ".join(str(f) for f in self.factors)
         return "TensorProductEntitySet({}: {})".format(factors, self.isl_set)
 
+    def interior(self):
+        return TensorProductEntitySet(*[f.interior() for f in self.factors], variant_tag=self.variant_tag)
+
     def boundaries(self):
         factors_set = set(self.factors)
 
