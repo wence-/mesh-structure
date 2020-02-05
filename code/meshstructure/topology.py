@@ -131,6 +131,16 @@ class UnstructuredEntitySet(EntitySet):
         index, = index_exprs
         return index
 
+    @lazyattr
+    def interior(self):
+        return UnstructuredEntitySet(self.size, cell=self.cell, codimension=self.codimension,
+                                     variant_tag=self.variant_tag)
+
+    @lazyattr
+    def boundaries(self):
+        return (UnstructuredEntitySet(self.size, cell=self.cell, codimension=self.codimension,
+                                      variant_tag=self.variant_tag),)
+
 
 def triangular_linear_index_map(i, j, n):
     """Given (i, j) : 0 <= i, j < n and i + j < n, produce a
@@ -153,24 +163,45 @@ class SimplexEntitySet(EntitySet):
 
     Produces an index set with
 
-    0 <= indices < extent, sum(indices) < extent
+    start <= indices < extent and sum(indices) < extent
 
     Where len(indices) == dimension
     """
-    def __init__(self, extent, *, cell, codimension, variant_tag=None):
+    def __init__(self, extent, *, cell, codimension, variant_tag=None, start=0):
         assert isinstance(extent, numbers.Integral)
         self.extent = extent
+        self.start = start
         dimension = cell.topological_dimension()
-        indices = tuple(Index(0, extent) for _ in range(dimension))
+        assert dimension * start < extent
+        indices = tuple(Index(start, extent) for _ in range(dimension))
         if indices:
             constraints = (pym.Comparison(reduce(operator.add, indices), "<", extent), )
         else:
             constraints = ()
         super().__init__(indices, constraints, cell=cell, codimension=codimension, variant_tag=variant_tag)
 
+    @lazyattr
+    def interior(self):
+        return self.__class__(self.extent - 1, cell=self.cell, codimension=self.codimension,
+                              variant_tag=self.variant_tag, start=self.start + 1)
+
+    @lazyattr
+    def boundaries(self):
+        boundaries = tuple()
+        for i in range(len(self.indices)):
+            boundary = self.__class__(self.extent, cell=self.cell, codimension=self.codimension - 1,
+                                      variant_tag=self.variant_tag, start=self.start)  # TODO: what about variant_tag?
+            boundary.constraints += (pym.Comparison(boundary.indices[i], "==", boundary.indices[i].lo),)
+            boundaries += (boundary,)
+        boundary = self.__class__(self.extent, cell=self.cell, codimension=self.codimension - 1,
+                                  variant_tag=self.variant_tag, start=self.start)
+        boundary.constraints += (pym.Comparison(reduce(operator.add, boundary.indices), "==", boundary.extent - 1),)
+        boundaries += (boundary,)
+
+        return boundaries
+
 
 class IntervalEntitySet(SimplexEntitySet):
-
     """A representation of some number of intervals."""
 
     def linear_index_map(self, index_exprs):
@@ -201,7 +232,19 @@ class TensorProductEntitySet(EntitySet):
     :arg factors: index sets for the directions in the tensor product.
     :arg variant_tag: Arbitrary distinguishing tag."""
     def __init__(self, *factors, variant_tag=None):
-        self.factors = tuple(factors)
+        self.factors = tuple()
+
+        def flatten_factor(factor):
+            if isinstance(factor, TensorProductEntitySet):
+                for f in factor.factors:
+                    yield from flatten_factor(f)
+            else:
+                yield factor
+
+        for factor in factors:
+            for f_ in flatten_factor(factor):
+                self.factors += (f_,)
+
         if any(isinstance(f, TensorProductEntitySet) for f in self.factors):
             raise ValueError("Can't deal with nested tensor products sorry")
         indices = tuple(itertools.chain(*(f.indices for f in self.factors)))
@@ -222,12 +265,26 @@ class TensorProductEntitySet(EntitySet):
             nindex = len(factor.indices)
             index_expr = index_exprs[:nindex]
             index_exprs = index_exprs[nindex:]
-            expr = expr + factor.linear_index_map(index_expr, None)*stride
+            expr = expr + factor.linear_index_map(index_expr)*stride
         return expr
 
     def __str__(self):
         factors = ", ".join(str(f) for f in self.factors)
         return "TensorProductEntitySet({}: {})".format(factors, self.isl_set)
+
+    @lazyattr
+    def interior(self):
+        return TensorProductEntitySet(*[f.interior for f in self.factors], variant_tag=self.variant_tag)
+
+    @lazyattr
+    def boundaries(self):
+        boundaries = tuple()
+        for factor in self.factors:
+            if not isinstance(factor, UnstructuredEntitySet):  # Otherwise the added TPES is just the same as self
+                for boundary in factor.boundaries:
+                    new_factors = tuple(f if f != factor else boundary for f in self.factors)
+                    boundaries = boundaries + (TensorProductEntitySet(*new_factors, variant_tag=self.variant_tag),)
+        return boundaries
 
 
 class MeshTopology(metaclass=abc.ABCMeta):
@@ -342,8 +399,8 @@ class MeshTopology(metaclass=abc.ABCMeta):
         else:
             points = self.cone(point)
         seen = set()
-        points = points + tuple(itertools.chain(*(self.index_relation(p, target)
-                                                  for p in points)))
+        points = tuple(itertools.chain(*(self.index_relation(p, target)
+                                         for p in points)))
         filtered_points = []
         for p in points:
             if p not in seen:

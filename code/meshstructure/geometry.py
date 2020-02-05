@@ -11,9 +11,9 @@ class MeshGeometry(ufl.Mesh, metaclass=abc.ABCMeta):
 
     def __init__(self, topology, element):
         """A representation of """
-        assert topology.dimension == element.topological_dimension()
+        assert topology.dimension == element.cell().topological_dimension()
         assert isinstance(element, ufl.VectorElement)
-        assert element.cell() == topology.cell()
+        assert element.cell() == topology.cell
         self.topology = topology
         self.element = element
         ufl.Mesh.__init__(self, element)
@@ -21,7 +21,7 @@ class MeshGeometry(ufl.Mesh, metaclass=abc.ABCMeta):
     @lazyattr
     def geometric_dimension(self):
         """The embedding dimension."""
-        return self.element.geometric_dimension()
+        return self.element.num_sub_elements()
 
     @lazyattr
     def topological_dimension(self):
